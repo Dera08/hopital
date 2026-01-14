@@ -1,14 +1,15 @@
 <?php
 
 namespace App\Models;
-
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
 class ClinicalAlert extends Model
 {
     use HasFactory;
-
+     use BelongsToHospital;
+     
     protected $fillable = [
-        'patient_id', 'triggered_by_id', 'alert_type', 'severity',
+        'hospital_id','patient_id', 'triggered_by_id', 'alert_type', 'severity',
         'message', 'is_acknowledged', 'acknowledged_by_id', 'acknowledged_at'
     ];
 

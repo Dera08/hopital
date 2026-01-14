@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{User, Service, AuditLog, Patient, Appointment, Admission, Invoice};
+use App\Models\{User, Service, AuditLog, Patient, Appointment, Admission, Invoice, Hospital};
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Hash, DB};
+use Illuminate\Support\Facades\{Hash, DB, Auth};
 use Carbon\Carbon;
 
 // ============ USER CONTROLLER ============
@@ -12,14 +12,80 @@ class UserController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('role:administrative,admin');
+        // On n'applique le middleware de restriction qu'aux méthodes de gestion administrative
+        // Sauf pour l'affichage du formulaire et le traitement de l'inscription
+        $this->middleware('role:administrative,admin')->except(['showRegistrationForm', 'register']);
     }
+
+    /**
+     * Affiche le formulaire d'auto-inscription pour les médecins/staff
+     */
+    public function showRegistrationForm($hospital_slug)
+    {
+        // Récupérer l'hôpital par son slug
+        $hospital = Hospital::where('slug', $hospital_slug)->where('is_active', true)->firstOrFail();
+
+        // On récupère les services de cet hôpital pour les afficher dans le menu déroulant
+        $services = Service::where('hospital_id', $hospital->id)->where('is_active', true)->get();
+
+        return view('auth.register', compact('services', 'hospital'));
+    }
+
+    /**
+     * Gère la soumission du formulaire d'auto-inscription (Action du Bouton)
+     */
+    public function register(Request $request, $hospital_slug)
+    {
+        // 1. Récupérer l'hôpital
+        $hospital = Hospital::where('slug', $hospital_slug)->where('is_active', true)->firstOrFail();
+
+        // 2. Validation stricte des données venant du formulaire
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:8|confirmed',
+            'role' => 'required|in:doctor,nurse,internal_doctor,administrative,cashier', // Ajout de cashier ici
+            'service_id' => 'required|exists:services,id',
+            'phone' => 'nullable|string|max:20',
+            'registration_number' => 'required|string|max:50',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            // Hachage du mot de passe
+            $validated['password'] = Hash::make($validated['password']);
+
+            // Sécurité : Compte inactif par défaut et liaison à l'hôpital
+            $validated['is_active'] = false;
+            $validated['hospital_id'] = $hospital->id;
+
+            // Création de l'utilisateur
+            $user = User::create($validated);
+
+            // Journalisation de l'action
+            AuditLog::log('register', 'User', $user->id, [
+                'description' => 'Auto-inscription d\'un nouveau praticien (en attente d\'activation)',
+                'hospital_id' => $hospital->id,
+            ]);
+
+            DB::commit();
+
+            // Redirection avec message de succès vers la page de login de l'hôpital
+            return redirect()->route('hospital.login', $hospital->slug)
+                             ->with('success', 'Votre demande d\'inscription a été transmise. Un administrateur activera votre compte après vérification.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withInput()->withErrors(['error' => 'Erreur lors de l\'inscription : ' . $e->getMessage()]);
+        }
+    }
+
+    // --- MÉTHODES DE GESTION ADMINISTRATIVE (CONSERVÉES) ---
 
     public function index(Request $request)
     {
-        $query = User::with('service');
+        $query = User::with('service')->where('hospital_id', auth()->user()->hospital_id);
 
-        // Filtres
         if ($request->filled('role')) {
             $query->where('role', $request->role);
         }
@@ -41,14 +107,14 @@ class UserController extends Controller
         }
 
         $users = $query->latest()->paginate(20);
-        $services = Service::where('is_active', true)->get();
+        $services = Service::where('hospital_id', auth()->user()->hospital_id)->where('is_active', true)->get();
 
         return view('users.index', compact('users', 'services'));
     }
 
     public function create()
     {
-        $services = Service::where('is_active', true)->get();
+        $services = Service::where('hospital_id', auth()->user()->hospital_id)->where('is_active', true)->get();
         return view('users.create', compact('services'));
     }
 
@@ -58,7 +124,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:admin,doctor,nurse,administrative',
+            'role' => 'required|in:admin,doctor,nurse,administrative,cashier',
             'service_id' => 'nullable|exists:services,id',
             'phone' => 'nullable|string|max:20',
             'registration_number' => 'nullable|string|max:50',
@@ -68,17 +134,17 @@ class UserController extends Controller
         try {
             $validated['password'] = Hash::make($validated['password']);
             $validated['is_active'] = true;
+            $validated['hospital_id'] = auth()->user()->hospital_id;
 
             $user = User::create($validated);
 
             AuditLog::log('create', 'User', $user->id, [
-                'description' => 'Création d\'un compte utilisateur',
+                'description' => 'Création d\'un compte utilisateur par un admin',
             ]);
 
             DB::commit();
 
-            return redirect()->route('users.index')
-                           ->with('success', 'Utilisateur créé avec succès.');
+            return redirect()->route('users.index')->with('success', 'Utilisateur créé avec succès.');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withInput()->withErrors(['error' => 'Erreur lors de la création.']);
@@ -88,11 +154,9 @@ class UserController extends Controller
     public function show(User $user)
     {
         $user->load('service');
-
-        // Statistiques de l'utilisateur
         $stats = [];
         
-        if ($user->isDoctor()) {
+        if ($user->role === 'doctor' || $user->role === 'internal_doctor') {
             $stats['appointments'] = Appointment::where('doctor_id', $user->id)->count();
             $stats['patients'] = Admission::where('doctor_id', $user->id)
                 ->distinct('patient_id')
@@ -104,7 +168,7 @@ class UserController extends Controller
 
     public function edit(User $user)
     {
-        $services = Service::where('is_active', true)->get();
+        $services = Service::where('hospital_id', auth()->user()->hospital_id)->where('is_active', true)->get();
         return view('users.edit', compact('user', 'services'));
     }
 
@@ -113,7 +177,7 @@ class UserController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $user->id,
-            'role' => 'required|in:admin,doctor,nurse,administrative',
+            'role' => 'required|in:admin,doctor,nurse,administrative,cashier',
             'service_id' => 'nullable|exists:services,id',
             'phone' => 'nullable|string|max:20',
             'registration_number' => 'nullable|string|max:50',
@@ -139,8 +203,7 @@ class UserController extends Controller
 
             DB::commit();
 
-            return redirect()->route('users.show', $user)
-                           ->with('success', 'Utilisateur mis à jour avec succès.');
+            return redirect()->route('users.show', $user)->with('success', 'Utilisateur mis à jour avec succès.');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withInput()->withErrors(['error' => 'Erreur lors de la mise à jour.']);
@@ -159,8 +222,7 @@ class UserController extends Controller
 
             DB::commit();
 
-            $message = $user->is_active ? 'Utilisateur activé.' : 'Utilisateur désactivé.';
-            return back()->with('success', $message);
+            return back()->with('success', $user->is_active ? 'Utilisateur activé.' : 'Utilisateur désactivé.');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Erreur lors du changement de statut.']);
@@ -169,18 +231,13 @@ class UserController extends Controller
 
     public function enableMfa(Request $request)
     {
-        // Activer le MFA pour l'utilisateur connecté
-        // Implémentation simplifiée
         auth()->user()->update(['mfa_enabled' => true]);
-        
         return back()->with('success', 'Authentification à deux facteurs activée.');
     }
 
     public function disableMfa(Request $request)
     {
         auth()->user()->update(['mfa_enabled' => false]);
-        
         return back()->with('success', 'Authentification à deux facteurs désactivée.');
     }
 }
- 

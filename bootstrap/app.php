@@ -1,21 +1,41 @@
 <?php
 
-// ============ bootstrap/app.php (Laravel 11) ============
-
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function () {
+            // Chargement des routes d'authentification
+            Route::middleware('web')
+                ->group(base_path('routes/auth.php'));
+            // C'est ici que ta "Fiche 2" (nurse.php) est chargée
+            Route::middleware('web')
+                ->group(base_path('routes/nurse.php'));
+        },
     )
-    ->withMiddleware(function (Middleware $middleware) {
-        // Middleware global
+   ->withMiddleware(function (Middleware $middleware) {
+        // Redirection intelligente corrigée
+        $middleware->redirectGuestsTo(function ($request) {
+            // ÉTAPE A : Si l'utilisateur est DÉJÀ sur la page login ou register, on ne redirige PAS
+            if ($request->is('portal/login') || $request->is('portal/register')) {
+                return null;
+            }
 
-        // Middleware pour groupes
+            // ÉTAPE B : Si on demande une page du portail sans être connecté
+            if ($request->is('portal/*') || $request->is('portal')) {
+                return route('patient.login');
+            }
+
+            // ÉTAPE C : Par défaut pour le staff
+            return route('login');
+        });
+
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
             'active_user' => \App\Http\Middleware\EnsureUserIsActive::class,
@@ -24,7 +44,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'check_service' => \App\Http\Middleware\CheckServiceAccess::class,
         ]);
 
-        // Middleware web par défaut
         $middleware->web(append: [
             \App\Http\Middleware\EnsureUserIsActive::class,
         ]);
@@ -32,7 +51,3 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();
-
-// ============ app/Providers/AppServiceProvider.php ============
-
- 

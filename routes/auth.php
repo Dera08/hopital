@@ -20,35 +20,7 @@ Route::get('login', function () {
     return view('auth.login');
 })->middleware('guest')->name('login');
 
-Route::post('login', function (Request $request) {
-    $credentials = $request->validate([
-        'email' => ['required', 'email'],
-        'password' => ['required'],
-    ]);
 
-    if (auth()->attempt($credentials, $request->boolean('remember'))) {
-        $request->session()->regenerate();
-
-        // Vérifier si l'utilisateur est actif
-        if (!auth()->user()->is_active) {
-            auth()->logout();
-            return back()->withErrors([
-                'email' => 'Votre compte a été désactivé. Contactez l\'administrateur.',
-            ])->onlyInput('email');
-        }
-
-        // Log de connexion
-        \App\Models\AuditLog::log('login', 'User', auth()->id(), [
-            'description' => 'Connexion réussie',
-        ]);
-
-        return redirect()->intended(route('dashboard'));
-    }
-
-    return back()->withErrors([
-        'email' => 'Les identifiants fournis sont incorrects.',
-    ])->onlyInput('email');
-})->middleware('guest');
 
 // ============ DÉCONNEXION ============
 Route::post('logout', function (Request $request) {
@@ -191,10 +163,10 @@ Route::middleware('auth')->group(function () {
 
     Route::post('mfa/setup', function (Request $request) {
         $user = auth()->user();
-        
+
         // Génération du secret MFA (utiliser Google2FA en production)
         $secret = \Illuminate\Support\Str::random(32);
-        
+
         $user->update([
             'mfa_enabled' => true,
             'mfa_secret' => encrypt($secret),
@@ -206,4 +178,19 @@ Route::middleware('auth')->group(function () {
 
         return redirect()->route('settings')->with('success', 'MFA activé avec succès.');
     })->name('mfa.setup.post');
+
+    Route::post('mfa/disable', function (Request $request) {
+        $user = auth()->user();
+
+        $user->update([
+            'mfa_enabled' => false,
+            'mfa_secret' => null,
+        ]);
+
+        \App\Models\AuditLog::log('mfa_disabled', 'User', $user->id, [
+            'description' => 'Désactivation de l\'authentification MFA',
+        ]);
+
+        return redirect()->route('settings')->with('success', 'MFA désactivé avec succès.');
+    })->name('mfa.disable');
 });

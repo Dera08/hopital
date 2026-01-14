@@ -1,4 +1,4 @@
-{{-- resources/views/appointments/index.blade.php --}}
+ {{-- Fichier : resources/views/appointments/index.blade.php --}}
 @extends('layouts.app')
 
 @section('title', 'Gestion des Rendez-vous')
@@ -12,53 +12,61 @@
                 <h1 class="text-2xl font-bold text-gray-900">Rendez-vous</h1>
                 <p class="text-sm text-gray-500 mt-1">{{ $appointments->total() }} rendez-vous</p>
             </div>
+            @if(!auth()->user()->isDoctor())
             <a href="{{ route('appointments.create') }}" class="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                 </svg>
                 Nouveau Rendez-vous
             </a>
+            @endif
         </div>
 
-        <!-- Filtres -->
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-            <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Date</label>
-                    <input type="date" name="date" value="{{ request('date') }}" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Statut</label>
-                    <select name="status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-                        <option value="">Tous</option>
-                        <option value="scheduled" {{ request('status') == 'scheduled' ? 'selected' : '' }}>Programmé</option>
-                        <option value="confirmed" {{ request('status') == 'confirmed' ? 'selected' : '' }}>Confirmé</option>
-                        <option value="completed" {{ request('status') == 'completed' ? 'selected' : '' }}>Terminé</option>
-                        <option value="cancelled" {{ request('status') == 'cancelled' ? 'selected' : '' }}>Annulé</option>
-                    </select>
-                </div>
-                @if(auth()->user()->isAdmin())
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Médecin</label>
-                    <select name="doctor_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
-                        <option value="">Tous</option>
-                        @foreach($doctors as $doctor)
-                        <option value="{{ $doctor->id }}" {{ request('doctor_id') == $doctor->id ? 'selected' : '' }}>
-                            {{ $doctor->name }}
-                        </option>
-                        @endforeach
-                    </select>
-                </div>
-                @endif
-                <div class="flex items-end">
-                    <button type="submit" class="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
-                        Filtrer
-                    </button>
-                </div>
-            </form>
+       {{-- REMPLACER LE BLOC DU FORMULAIRE PAR CELUI-CI --}}
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+   <form action="{{ auth()->user()->role === 'doctor' ? route('medecin.dashboard') : route('appointments.index') }}" method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Date</label>
+            <input type="date" name="date" value="{{ request('date') }}" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
         </div>
 
-        <!-- Liste des rendez-vous -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Statut</label>
+            <select name="status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                <option value="">Tous</option>
+                <option value="scheduled" {{ request('status') == 'scheduled' ? 'selected' : '' }}>Programmé</option>
+                <option value="confirmed" {{ request('status') == 'confirmed' ? 'selected' : '' }}>Confirmé</option>
+                <option value="completed" {{ request('status') == 'completed' ? 'selected' : '' }}>Terminé</option>
+                <option value="cancelled" {{ request('status') == 'cancelled' ? 'selected' : '' }}>Annulé</option>
+                <option value="no_show" {{ request('status') == 'no_show' ? 'selected' : '' }}>Absent</option>
+            </select>
+        </div>
+
+        @if(auth()->user()->isAdmin())
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Médecin</label>
+            <select name="doctor_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                <option value="">Tous</option>
+                @foreach($doctors as $doctor)
+                <option value="{{ $doctor->id }}" {{ request('doctor_id') == $doctor->id ? 'selected' : '' }}>
+                    {{ $doctor->name }}
+                </option>
+                @endforeach
+            </select>
+        </div>
+        @else
+            {{-- Champ vide pour maintenir la grille de 4 colonnes si pas admin --}}
+            <div></div>
+        @endif
+
+        <div class="flex items-end">
+            <button type="submit" class="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                Filtrer
+            </button>
+        </div>
+    </form>
+</div>
+
         <div class="bg-white rounded-lg shadow overflow-hidden">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -84,27 +92,43 @@
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-medium text-gray-900">{{ $appointment->patient->full_name }}</div>
-                            <div class="text-sm text-gray-500">{{ $appointment->patient->ipu }}</div>
+                            @if($appointment->patient)
+                                <div class="text-sm font-medium text-gray-900">{{ $appointment->patient->full_name }}</div>
+                                <div class="text-sm text-gray-500">{{ $appointment->patient->ipu }}</div>
+                            @else
+                                <div class="text-sm font-medium text-red-600">Patient supprimé</div>
+                                <div class="text-sm text-gray-500">N/A</div>
+                            @endif
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ $appointment->doctor->name }}
+                            {{ $appointment->doctor ? $appointment->doctor->name : 'Médecin supprimé' }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ $appointment->service->name }}
+                            {{ $appointment->service ? $appointment->service->name : 'Service supprimé' }}
                         </td>
                         <td class="px-6 py-4 text-sm text-gray-500">
                             {{ Str::limit($appointment->reason, 30) ?? 'Non spécifié' }}
                         </td>
+                        
+                        {{-- Colonne Statut MODIFIÉE en Select --}}
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                                @if($appointment->status === 'confirmed') bg-green-100 text-green-800
-                                @elseif($appointment->status === 'scheduled') bg-blue-100 text-blue-800
-                                @elseif($appointment->status === 'completed') bg-gray-100 text-gray-800
-                                @else bg-red-100 text-red-800 @endif">
-                                {{ ucfirst($appointment->status) }}
-                            </span>
+                            <select 
+                                onchange="updateStatus({{ $appointment->id }}, this.value)"
+                                class="status-select text-sm rounded-lg border-gray-300 focus:ring-purple-500 focus:border-purple-500 cursor-pointer
+                                    {{ $appointment->status === 'scheduled' ? 'bg-yellow-50 text-yellow-800 border-yellow-300' : '' }}
+                                    {{ $appointment->status === 'confirmed' ? 'bg-green-50 text-green-800 border-green-300' : '' }}
+                                    {{ $appointment->status === 'completed' ? 'bg-gray-50 text-gray-800 border-gray-300' : '' }}
+                                    {{ $appointment->status === 'cancelled' ? 'bg-red-50 text-red-800 border-red-300' : '' }}
+                                    {{ $appointment->status === 'no_show' ? 'bg-orange-50 text-orange-800 border-orange-300' : '' }}">
+                                <option value="scheduled" {{ $appointment->status === 'scheduled' ? 'selected' : '' }}>Programmé</option>
+                                <option value="confirmed" {{ $appointment->status === 'confirmed' ? 'selected' : '' }}>Confirmé</option>
+                                <option value="completed" {{ $appointment->status === 'completed' ? 'selected' : '' }}>Terminé</option>
+                                <option value="cancelled" {{ $appointment->status === 'cancelled' ? 'selected' : '' }}>Annulé</option>
+                                <option value="no_show" {{ $appointment->status === 'no_show' ? 'selected' : '' }}>Absent</option>
+                            </select>
                         </td>
+                        {{-- Fin de la colonne Statut modifiée --}}
+
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div class="flex justify-end space-x-2">
                                 <a href="{{ route('appointments.show', $appointment) }}" class="text-blue-600 hover:text-blue-900" title="Voir">
@@ -113,16 +137,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                                     </svg>
                                 </a>
-                                @if($appointment->status === 'scheduled')
-                                <form method="POST" action="{{ route('appointments.confirm', $appointment) }}" class="inline">
-                                    @csrf
-                                    <button type="submit" class="text-green-600 hover:text-green-900" title="Confirmer">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                        </svg>
-                                    </button>
-                                </form>
-                                @endif
+                                {{-- J'ai retiré le formulaire de confirmation direct pour utiliser la mise à jour par AJAX --}}
                             </div>
                         </td>
                     </tr>
@@ -138,12 +153,90 @@
 
             @if($appointments->hasPages())
             <div class="bg-gray-50 px-6 py-4 border-t">
-                {{ $appointments->links() }}
+                {{ $appointments->appends(request()->query())->links() }}
             </div>
             @endif
         </div>
     </div>
 </div>
-@endsection
 
- 
+<script>
+    function updateStatus(appointmentId, newStatus) {
+        if (!confirm('Voulez-vous vraiment changer le statut de ce rendez-vous ?')) {
+            // Recharger pour annuler le changement si l'utilisateur dit non
+            location.reload(); 
+            return;
+        }
+
+        // Récupérer le token CSRF à partir de la balise meta
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+        fetch(`/appointments/${appointmentId}/status`, {
+            method: 'POST', // On utilise POST pour simuler PATCH, si nécessaire
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                // Ligne optionnelle, mais souvent nécessaire si la route est définie comme PATCH
+                'X-HTTP-Method-Override': 'PATCH' 
+            },
+            body: JSON.stringify({ status: newStatus, _method: 'PATCH' })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => Promise.reject(data));
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                showNotification('✓ Statut mis à jour avec succès', 'success');
+                // Recharger la page après 1 seconde pour mettre à jour la couleur et les filtres (si appliqués)
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showNotification('❌ Erreur: ' + (data.message || 'Problème inconnu.'), 'error');
+                location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            const errorMessage = error.message || 'Une erreur est survenue lors de la connexion au serveur.';
+            showNotification('❌ ' + errorMessage, 'error');
+            location.reload();
+        });
+    }
+
+    function showNotification(message, type) {
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 px-6 py-4 rounded-lg shadow-lg z-50 ${
+            type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        } text-white font-semibold`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => notification.remove(), 3000);
+    }
+</script>
+
+<style>
+.status-select {
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    position: relative;
+    z-index: 10;
+}
+
+.status-select:hover {
+    opacity: 0.8;
+}
+
+/* Allow dropdown to overflow table container */
+.bg-white.rounded-lg.shadow.overflow-hidden {
+    overflow: visible;
+}
+
+/* Ensure table cell allows overflow */
+tbody tr td {
+    position: relative;
+}
+</style>
+@endsection

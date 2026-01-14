@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Models;
+use App\Traits\BelongsToHospital;
 
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
 
@@ -8,9 +9,10 @@ use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
 class Room extends Model
 {
     use HasFactory;
+    use BelongsToHospital;
 
     protected $fillable = [
-        'room_number', 'bed_capacity', 'service_id', 
+        'hospital_id','room_number', 'bed_capacity', 'service_id', 
         'status', 'type', 'is_active'
     ];
 
@@ -34,6 +36,11 @@ class Room extends Model
         return $this->hasOne(Admission::class)->where('status', 'active')->latest();
     }
 
+    public function patientVital()
+    {
+        return $this->belongsTo(PatientVital::class);
+    }
+
     public function scopeAvailable($query)
     {
         return $query->where('status', 'available')->where('is_active', true);
@@ -48,4 +55,10 @@ class Room extends Model
     {
         return $this->status === 'available' && $this->is_active;
     }
+    // Dans App\Models\Room.php
+
+public function beds()
+{
+    return $this->hasMany(Bed::class);
+}
 } 

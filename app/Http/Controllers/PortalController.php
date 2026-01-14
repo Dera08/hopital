@@ -129,4 +129,19 @@ class PortalController extends Controller
 
         return back()->with('success', 'Profil mis à jour avec succès.');
     }
+    public function bookAppointmentForm()
+  {
+    $patient = auth()->guard('patients')->user();
+    
+    // Récupérer les médecins disponibles
+    $doctors = \App\Models\User::where('role', 'doctor')
+        ->where('is_active', true)
+        ->with('service')
+        ->get();
+    
+    // Récupérer les services
+    $services = \App\Models\Service::where('is_active', true)->get();
+    
+    return view('portal.book-appointment', compact('doctors', 'services'));
+  }
 }

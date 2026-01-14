@@ -2,13 +2,15 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
 class MedicalDocument extends Model
 {
     use HasFactory, SoftDeletes;
-
+     use BelongsToHospital;
+     
     protected $fillable = [
-        'patient_id', 'uploaded_by_id', 'document_type', 'title',
+       'hospital_id', 'patient_id', 'uploaded_by_id', 'document_type', 'title',
         'file_path', 'file_name', 'mime_type', 'file_size',
         'is_validated', 'validated_by_id', 'validated_at',
         'version', 'parent_document_id'

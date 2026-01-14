@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
-
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
 class DoctorAvailability extends Model
 {
     use HasFactory;
+     use BelongsToHospital;
 
     protected $fillable = [
-        'doctor_id', 'day_of_week', 'start_time', 
+       'hospital_id', 'doctor_id', 'day_of_week', 'start_time', 
         'end_time', 'slot_duration', 'is_active'
     ];
 

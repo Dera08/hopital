@@ -11,9 +11,6 @@
                 <div class="p-6 lg:p-8 bg-white border-b border-gray-200">
                     <div class="flex justify-between items-center mb-6">
                         <h3 class="text-lg font-semibold">Mes Rendez-vous</h3>
-                        <a href="{{ route('portal.book-appointment') }}" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                            Prendre un rendez-vous
-                        </a>
                     </div>
 
                     @if($appointments->count() > 0)
@@ -56,7 +53,7 @@
 
                                             @if($appointment->status === 'scheduled' && $appointment->appointment_datetime > now())
                                                 <div class="mt-2">
-                                                    <form method="POST" action="{{ route('portal.cancel-appointment', $appointment) }}" class="inline">
+                                                    <form method="POST" action="{{ route('patient.cancel-appointment', $appointment) }}" class="inline">
                                                         @csrf
                                                         @method('DELETE')
                                                         <button type="submit" class="text-red-600 hover:text-red-800 text-sm font-medium"
@@ -83,7 +80,7 @@
                             <h3 class="mt-2 text-sm font-medium text-gray-900">Aucun rendez-vous</h3>
                             <p class="mt-1 text-sm text-gray-500">Vous n'avez pas encore de rendez-vous programmés.</p>
                             <div class="mt-6">
-                                <a href="{{ route('portal.book-appointment') }}" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                                <a href="{{ route('patient.book-appointment') }}" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
                                     Prendre un rendez-vous
                                 </a>
                             </div>

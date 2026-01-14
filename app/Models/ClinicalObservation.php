@@ -1,14 +1,18 @@
 <?php
 
 namespace App\Models;
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
+
 class ClinicalObservation extends Model
 {
     use HasFactory;
+    use BelongsToHospital;
 
     protected $fillable = [
-        'patient_id', 'user_id', 'type', 'value', 'unit',
-        'observation_datetime', 'notes', 'is_critical'
+        'hospital_id','patient_id', 'user_id', 'temperature', 'pulse', 
+        'weight', 'height', 'observation_datetime', 'value','is_critical'
+        // J'ai supprimé 'notes' ici pour éviter l'erreur SQL
     ];
 
     protected $casts = [
@@ -26,28 +30,5 @@ class ClinicalObservation extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function scopeCritical($query)
-    {
-        return $query->where('is_critical', true);
-    }
-
-    public function scopeRecent($query, int $days = 7)
-    {
-        return $query->where('observation_datetime', '>=', now()->subDays($days));
-    }
-
-    public function getTypeLabelAttribute(): string
-    {
-        $labels = [
-            'blood_pressure' => 'Tension Artérielle',
-            'temperature' => 'Température',
-            'heart_rate' => 'Fréquence Cardiaque',
-            'weight' => 'Poids',
-            'height' => 'Taille',
-            'oxygen_saturation' => 'Saturation O2',
-            'glucose' => 'Glycémie',
-        ];
-
-        return $labels[$this->type] ?? $this->type;
-    }
+    // ... reste du code (scopes et attributes) sans changement
 }

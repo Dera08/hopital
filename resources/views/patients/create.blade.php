@@ -62,8 +62,8 @@
                             <label class="block text-sm font-medium text-gray-700 mb-2">Sexe *</label>
                             <select name="gender" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                                 <option value="">Sélectionner...</option>
-                                <option value="M" {{ old('gender') == 'M' ? 'selected' : '' }}>Masculin</option>
-                                <option value="F" {{ old('gender') == 'F' ? 'selected' : '' }}>Féminin</option>
+                                <option value="Homme" {{ old('gender') == 'Homme' ? 'selected' : '' }}>Masculin</option>
+                                <option value="Femme" {{ old('gender') == 'Femme' ? 'selected' : '' }}>Féminin</option>
                                 <option value="Other" {{ old('gender') == 'Other' ? 'selected' : '' }}>Autre</option>
                             </select>
                         </div>

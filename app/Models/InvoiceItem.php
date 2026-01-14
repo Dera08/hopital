@@ -1,12 +1,14 @@
 <?php
 namespace App\Models;
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
  class InvoiceItem extends Model
 {
     use HasFactory;
+     use BelongsToHospital;
 
     protected $fillable = [
-        'invoice_id', 'description', 'quantity', 
+        'hospital_id','invoice_id', 'description', 'quantity', 
         'unit_price', 'total', 'code'
     ];
 

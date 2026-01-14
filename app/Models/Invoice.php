@@ -2,15 +2,18 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
+use Illuminate\Database\Eloquent\Relations\BelongsTo; // Importation nécessaire
+
 class Invoice extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToHospital;
 
     protected $fillable = [
-        'invoice_number', 'patient_id', 'admission_id', 
-        'invoice_date', 'due_date', 'subtotal', 'tax', 
-        'total', 'status', 'paid_at', 'notes'
+       'hospital_id', 'invoice_number', 'patient_id', 'appointment_id', // J'ai ajouté appointment_id
+       'admission_id', 'invoice_date', 'due_date', 'subtotal', 'tax',
+       'total', 'status', 'paid_at', 'payment_method', 'notes'
     ];
 
     protected $casts = [
@@ -22,14 +25,25 @@ class Invoice extends Model
         'total' => 'decimal:2',
     ];
 
-    public function patient()
+    // RELATION MANQUANTE : Lien avec le rendez-vous
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
+    }
+
+    public function patient(): BelongsTo
     {
         return $this->belongsTo(Patient::class);
     }
 
-    public function admission()
+    public function admission(): BelongsTo
     {
         return $this->belongsTo(Admission::class);
+    }
+
+    public function walkInConsultation(): BelongsTo
+    {
+        return $this->belongsTo(WalkInConsultation::class);
     }
 
     public function items()
@@ -37,25 +51,15 @@ class Invoice extends Model
         return $this->hasMany(InvoiceItem::class);
     }
 
+    // SCOPES
     public function scopePaid($query)
     {
         return $query->where('status', 'paid');
     }
 
-    public function scopePending($query)
-    {
-        return $query->where('status', 'pending');
-    }
-
+    // ACCESSEURS
     public function getIsPaidAttribute(): bool
     {
         return $this->status === 'paid';
-    }
-
-    public function getIsOverdueAttribute(): bool
-    {
-        return $this->status === 'pending' 
-            && $this->due_date 
-            && $this->due_date->isPast();
     }
 }

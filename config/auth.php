@@ -1,4 +1,4 @@
-  <?php
+<?php
 
 return [
 
@@ -20,15 +20,15 @@ return [
     ],
 
     'providers' => [
-       'users' => [
-          'driver' => 'eloquent',
-           'model' => App\Models\User::class,
+        'users' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\User::class,
         ],
 
-       'patients' => [
-          'driver' => 'patient', // ✅ Utiliser le provider personnalisé
-          'model' => App\Models\Patient::class,
-        ], 
+        'patients' => [
+            'driver' => 'eloquent', // ✅ DOIT être 'eloquent' (pas 'patient')
+            'model' => App\Models\Patient::class,
+        ],
     ],
 
     'passwords' => [
@@ -46,9 +46,7 @@ return [
             'throttle' => 60,
         ],
     ],
-    
 
     'password_timeout' => 10800,
-
 
 ];

@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{Patient, Admission, Appointment, MedicalRecord, Prescription, ClinicalObservation, AuditLog};
+use App\Models\{Patient, Admission, Appointment, MedicalRecord, Prescription, ClinicalObservation, AuditLog, Hospital};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+
 
 class PatientController extends Controller
 {
@@ -48,8 +49,8 @@ class PatientController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'first_name' => 'required|string|max:255',
-            'dob' => 'required|date|before:today',
-            'gender' => 'required|in:M,F,Other',
+            'dob' => 'nullable|date|before:today',
+            'gender' => 'nullable|in:Homme,Femme,Other',
             'address' => 'nullable|string|max:500',
             'city' => 'nullable|string|max:100',
             'postal_code' => 'nullable|string|max:20',
@@ -58,15 +59,23 @@ class PatientController extends Controller
             'emergency_contact_name' => 'nullable|string|max:255',
             'emergency_contact_phone' => 'nullable|string|max:20',
             'blood_group' => 'nullable|string|max:5',
-            'allergies' => 'nullable|array',
+            'allergies' => 'nullable|string',
             'medical_history' => 'nullable|string',
         ]);
+
+        // Convert allergies string to array if present
+        if (isset($validated['allergies']) && is_string($validated['allergies'])) {
+            $validated['allergies'] = array_map('trim', explode(',', $validated['allergies']));
+        }
+
+        // Add hospital_id from authenticated user
+        $validated['hospital_id'] = auth()->user()->hospital_id;
 
         DB::beginTransaction();
         try {
             // Génération de l'IPU unique
             $validated['ipu'] = Patient::generateIpu();
-            
+
             $patient = Patient::create($validated);
 
             // Journalisation
@@ -86,78 +95,80 @@ class PatientController extends Controller
     }
 
     public function show(Patient $patient)
-    {
-        $patient->load([
-            'admissions' => fn($q) => $q->latest()->limit(5),
-            'appointments' => fn($q) => $q->latest()->limit(10),
-            'prescriptions' => fn($q) => $q->latest()->limit(10),
-        ]);
+  {
+    // Charger les patientVitals pour l'historique
+    $patientVitals = \App\Models\PatientVital::where('patient_ipu', $patient->ipu)
+        ->orderBy('created_at', 'desc')
+        ->get();
 
-        // Dernières constantes vitales
-        $recentObservations = ClinicalObservation::where('patient_id', $patient->id)
-            ->latest('observation_datetime')
-            ->limit(5)
-            ->get()
-            ->groupBy('type');
+    // On ajoute 'clinicalObservations.user' pour charger les soins et le nom du médecin qui les a faits
+    $patient->load(['clinicalObservations' => function($query) {
+        $query->orderBy('observation_datetime', 'desc');
+    }, 'clinicalObservations.user']);
 
-        // Statistiques du patient
-        $stats = [
-            'total_admissions' => $patient->admissions()->count(),
-            'total_appointments' => $patient->appointments()->count(),
-            'active_prescriptions' => $patient->prescriptions()->where('status', 'active')->count(),
-            'last_visit' => $patient->appointments()->where('status', 'completed')->latest('appointment_datetime')->first()?->appointment_datetime,
-        ];
-
-        return view('patients.show', compact('patient', 'recentObservations', 'stats'));
-    }
+    return view('patients.show', compact('patient', 'patientVitals'));
+  }
 
     public function edit(Patient $patient)
     {
-        return view('patients.edit', compact('patient'));
+        $hospitals = Hospital::where('is_active', true)->get();
+        return view('patients.edit', compact('patient', 'hospitals'));
     }
 
-    public function update(Request $request, Patient $patient)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'first_name' => 'required|string|max:255',
-            'dob' => 'required|date|before:today',
-            'gender' => 'required|in:M,F,Other',
-            'address' => 'nullable|string|max:500',
-            'city' => 'nullable|string|max:100',
-            'postal_code' => 'nullable|string|max:20',
-            'phone' => 'required|string|max:20',
-            'email' => 'nullable|email|max:255',
-            'emergency_contact_name' => 'nullable|string|max:255',
-            'emergency_contact_phone' => 'nullable|string|max:20',
-            'blood_group' => 'nullable|string|max:5',
-            'allergies' => 'nullable|array',
-            'medical_history' => 'nullable|string',
-            'is_active' => 'boolean',
+     public function update(Request $request, Patient $patient)
+{
+    \Log::info('Patient update method called', [
+        'patient_id' => $patient->id,
+        'request_data' => $request->all()
+    ]);
+
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'first_name' => 'required|string|max:255',
+        'dob' => 'nullable|date|before:today',
+        'gender' => 'nullable|in:Homme,Femme,Other',
+        'hospital_id' => 'nullable|exists:hospitals,id',
+        'address' => 'nullable|string|max:500',
+        'city' => 'nullable|string|max:100',
+        'postal_code' => 'nullable|string|max:20',
+        'phone' => 'nullable|string|max:20',
+        'email' => 'nullable|email|max:255',
+        'emergency_contact_name' => 'nullable|string|max:255',
+        'emergency_contact_phone' => 'nullable|string|max:20',
+        'blood_group' => 'nullable|string|max:5',
+        'allergies' => 'nullable|string',
+        'medical_history' => 'nullable|string',
+        'is_active' => 'boolean',
+    ]);
+
+    // Convert allergies string to array if present
+    if (isset($validated['allergies']) && is_string($validated['allergies'])) {
+        $validated['allergies'] = array_map('trim', explode(',', $validated['allergies']));
+    }
+
+    DB::beginTransaction();
+    try {
+        $oldData = $patient->toArray();
+
+        $patient->update($validated);
+
+        // Journalisation
+        AuditLog::log('update', 'Patient', $patient->id, [
+            'description' => 'Mise à jour du dossier patient (Coordonnées & Allergies)',
+            'old' => $oldData,
+            'new' => $patient->toArray()
         ]);
 
-        DB::beginTransaction();
-        try {
-            $oldData = $patient->toArray();
-            
-            $patient->update($validated);
+        DB::commit();
 
-            // Journalisation
-            AuditLog::log('update', 'Patient', $patient->id, [
-                'description' => 'Mise à jour du dossier patient',
-                'old' => $oldData,
-                'new' => $patient->toArray()
-            ]);
-
-            DB::commit();
-
-            return redirect()->route('patients.show', $patient)
-                           ->with('success', 'Patient mis à jour avec succès.');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->withInput()->withErrors(['error' => 'Erreur lors de la mise à jour.']);
-        }
+        // On redirige vers l'onglet coordonnées spécifiquement après l'update
+        return redirect()->to(route('patients.show', $patient) . '#tab-coords')
+                         ->with('success', 'Dossier mis à jour avec succès.');
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return back()->withInput()->withErrors(['error' => 'Erreur lors de la mise à jour : ' . $e->getMessage()]);
     }
+   }
 
     public function destroy(Patient $patient)
     {
@@ -236,4 +247,15 @@ class PatientController extends Controller
             ];
         }));
     }
+    public function archive(\App\Models\Patient $patient)
+{
+    // On utilise la colonne 'is_active' que j'ai vue dans vos logs SQL
+    $patient->update([
+        'is_active' => false 
+    ]);
+
+    // On redirige vers le dashboard du médecin avec un message
+    return redirect()->route('medecin.dashboard')
+                     ->with('success', 'Le dossier du patient ' . $patient->name . ' a été archivé.');
+ } 
 }

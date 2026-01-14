@@ -1,14 +1,15 @@
 <?php
 
 namespace App\Models;
-
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
 class NursingNote extends Model
 {
     use HasFactory;
+     use BelongsToHospital;
 
     protected $fillable = [
-        'patient_id', 'nurse_id', 'prescription_id', 
+        'hospital_id','patient_id', 'nurse_id', 'prescription_id', 
         'note_type', 'content', 'care_datetime', 'signature_hash'
     ];
 

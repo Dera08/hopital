@@ -86,9 +86,17 @@
                             <div class="text-sm font-medium text-gray-900">{{ $admission->patient->full_name }}</div>
                             <div class="text-sm text-gray-500">{{ $admission->patient->ipu }}</div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ $admission->room->room_number ?? 'Non assigné' }}
-                        </td>
+                       <td class="px-6 py-4 whitespace-nowrap">
+    <div class="text-sm font-medium text-gray-900">
+        {{ $admission->room->room_number ?? 'Non assigné' }}
+    </div>
+    <div class="text-xs text-blue-600 flex items-center mt-1">
+        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M3 10h18M3 14h18m-9-4v8m-7 0V6a2 2 0 012-2h10a2 2 0 012 2v12"></path>
+        </svg>
+        {{ $admission->bed->bed_number ?? 'Lit non spécifié' }}
+    </div>
+</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {{ $admission->room->service->name ?? '-' }}
                         </td>

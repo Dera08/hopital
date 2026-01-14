@@ -7,11 +7,9 @@
 
     <title>{{ config('app.name', 'Laravel') }} - Portail Patient</title>
 
-    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
-    <!-- Scripts -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="antialiased bg-gray-50">
@@ -23,20 +21,20 @@
                     <div class="flex">
                         <!-- Logo -->
                         <div class="shrink-0 flex items-center">
-                            <a href="{{ route('portal.dashboard') }}" class="text-xl font-bold text-gray-800">
+                            <a href="{{ route('patient.dashboard') }}" class="text-xl font-bold text-gray-800">
                                 Hôpital - Portail Patient
                             </a>
                         </div>
 
                         <!-- Navigation Links -->
                         <div class="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
-                            <x-nav-link href="{{ route('portal.dashboard') }}" :active="request()->routeIs('portal.dashboard')">
+                            <x-nav-link href="{{ route('patient.dashboard') }}" :active="request()->routeIs('patient.dashboard')">
                                 {{ __('Tableau de bord') }}
                             </x-nav-link>
-                            <x-nav-link href="{{ route('portal.appointments') }}" :active="request()->routeIs('portal.appointments*')">
+                            <x-nav-link href="{{ route('patient.appointments') }}" :active="request()->routeIs('patient.appointments*')">
                                 {{ __('Rendez-vous') }}
                             </x-nav-link>
-                            <x-nav-link href="{{ route('portal.documents') }}" :active="request()->routeIs('portal.documents')">
+                            <x-nav-link href="{{ route('patient.documents') }}" :active="request()->routeIs('patient.documents')">
                                 {{ __('Documents') }}
                             </x-nav-link>
                         </div>
@@ -58,15 +56,15 @@
                             </x-slot>
 
                             <x-slot name="content">
-                                <x-dropdown-link href="{{ route('portal.profile') }}">
+                                <x-dropdown-link href="{{ route('patient.profile') }}">
                                     {{ __('Mon Profil') }}
                                 </x-dropdown-link>
 
                                 <!-- Authentication -->
-                                <form method="POST" action="{{ route('portal.logout') }}">
+                                <form method="POST" action="{{ route('patient.logout') }}">
                                     @csrf
 
-                                    <x-dropdown-link href="{{ route('portal.logout') }}"
+                                    <x-dropdown-link href="{{ route('patient.logout') }}"
                                                      onclick="event.preventDefault();
                                                     this.closest('form').submit();">
                                         {{ __('Se déconnecter') }}
@@ -91,13 +89,13 @@
             <!-- Responsive Navigation Menu -->
             <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
                 <div class="pt-2 pb-3 space-y-1">
-                    <x-responsive-nav-link href="{{ route('portal.dashboard') }}" :active="request()->routeIs('portal.dashboard')">
+                    <x-responsive-nav-link href="{{ route('patient.dashboard') }}" :active="request()->routeIs('patient.dashboard')">
                         {{ __('Tableau de bord') }}
                     </x-responsive-nav-link>
-                    <x-responsive-nav-link href="{{ route('portal.appointments') }}" :active="request()->routeIs('portal.appointments*')">
+                    <x-responsive-nav-link href="{{ route('patient.appointments') }}" :active="request()->routeIs('patient.appointments*')">
                         {{ __('Rendez-vous') }}
                     </x-responsive-nav-link>
-                    <x-responsive-nav-link href="{{ route('portal.documents') }}" :active="request()->routeIs('portal.documents')">
+                    <x-responsive-nav-link href="{{ route('patient.documents') }}" :active="request()->routeIs('patient.documents')">
                         {{ __('Documents') }}
                     </x-responsive-nav-link>
                 </div>
@@ -110,15 +108,15 @@
                     </div>
 
                     <div class="mt-3 space-y-1">
-                        <x-responsive-nav-link href="{{ route('portal.profile') }}">
+                        <x-responsive-nav-link href="{{ route('patient.profile') }}">
                             {{ __('Mon Profil') }}
                         </x-responsive-nav-link>
 
                         <!-- Authentication -->
-                        <form method="POST" action="{{ route('portal.logout') }}">
+                        <form method="POST" action="{{ route('patient.logout') }}">
                             @csrf
 
-                            <x-responsive-nav-link href="{{ route('portal.logout') }}"
+                            <x-responsive-nav-link href="{{ route('patient.logout') }}"
                                                    onclick="event.preventDefault();
                                                 this.closest('form').submit();">
                                 {{ __('Se déconnecter') }}
@@ -157,19 +155,5 @@
             </ul>
         </div>
     @endif
-
-    <script>
-        // Auto-hide alerts after 4 seconds
-        document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(function() {
-                const alerts = document.querySelectorAll('[x-data*="show"]');
-                alerts.forEach(alert => {
-                    if (alert.__x) {
-                        alert.__x.$data.show = false;
-                    }
-                });
-            }, 4000);
-        });
-    </script>
 </body>
 </html>

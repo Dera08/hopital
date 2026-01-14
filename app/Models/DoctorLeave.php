@@ -1,13 +1,16 @@
 <?php
 
 namespace App\Models;
+
+use App\Traits\BelongsToHospital;
 use Illuminate\Database\Eloquent\{Model, Factories\HasFactory, SoftDeletes};
 class DoctorLeave extends Model
 {
     use HasFactory;
+     use BelongsToHospital;
 
     protected $fillable = [
-        'doctor_id', 'start_date', 'end_date', 
+       'hospital_id', 'doctor_id', 'start_date', 'end_date', 
         'leave_type', 'reason'
     ];
 

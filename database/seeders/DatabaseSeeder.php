@@ -2,216 +2,321 @@
 
 namespace Database\Seeders;
 
+use App\Models\Appointment;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\{Hash, DB};
-use App\Models\{Service, User, Patient, Room};
+use App\Models\{Service, User, Patient, Room, Hospital, PatientVital};
 
 class DatabaseSeeder extends Seeder
-{
+
+{ 
     public function run(): void
+{
+    DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+    
+    Hospital::truncate();
+    Service::truncate();
+    User::truncate();
+    Patient::truncate();
+    Room::truncate();
+    Appointment::truncate();
+    PatientVital::truncate();
+    
+    DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
+    // --- 1. CRÉATION DES HÔPITAUX ---
+    $hospital1 = Hospital::create([
+        'name' => 'Centre Hospitalier HospisIS',
+        'slug' => 'hospisis-ci',
+        'address' => 'Abidjan, Côte d\'Ivoire',
+    ]);
+    
+    $this->seedAllData($hospital1->id, 'hospisis.ci', 'HospisIS');
+    $this->command->info('✅ Données Hôpital 1 (HospisIS) terminées');
+
+    $hospital2 = Hospital::create([
+        'name' => 'Clinique Médicale Saint-Jean',
+        'slug' => 'saint-jean-ci',
+        'address' => 'Abidjan, Plateau',
+        'logo' => 'logos/saint-jean-logo.svg',
+        'is_active' => true,
+    ]);
+
+    $this->seedAllData($hospital2->id, 'saintjean.ci', 'Saint-Jean');
+    $this->command->info('✅ Données Hôpital 2 (Saint-Jean) terminées');
+
+    // --- 2. CRÉATION DU MÉDECIN (Cardiologie) ---
+    $doctor = User::updateOrCreate(
+        ['email' => 'doctor@saintjean.ci'],
+        [
+            'name' => 'Dr. Kouamé Jean',
+            'password' => Hash::make('password'),
+            'role' => 'doctor',
+            'service_id' => 7, // Cardiologie
+            'hospital_id' => $hospital2->id,
+        ]
+    );
+
+    // --- 3. CRÉATION DE L'INFIRMIER (Cardiologie) ---
+    $nurseCardio = User::updateOrCreate(
+        ['email' => 'infirmier.cardio@saintjean.ci'],
+        [
+            'name' => 'Infirmier Diallo (Cardio)',
+            'password' => Hash::make('password'),
+            'role' => 'nurse',
+            'service_id' => 7,
+            'hospital_id' => $hospital2->id,
+        ]
+    );
+
+    // --- 4. CRÉATION DU CAISSIER ---
+    $cashier = User::updateOrCreate(
+        ['email' => 'cashier@saintjean.ci'],
+        [
+            'name' => 'Caissier Dupont (Saint-Jean)',
+            'password' => Hash::make('password'),
+            'role' => 'cashier',
+            'hospital_id' => $hospital2->id,
+            'is_active' => true,
+        ]
+    );
+
+    // --- 1. CRÉATION DU NOUVEAU PATIENT (Kouadio Konan) ---
+    $newPatient = Patient::updateOrCreate(
+        ['ipu' => 'IPU-2026-TEST'], // IPU unique
+        [
+            'hospital_id' => $hospital2->id, // Clinique Saint-Jean
+            'name' => 'Kouadio Konan',
+            'first_name' => 'Konan',
+            'dob' => '1990-01-01',
+            'gender' => 'Homme',
+            'phone' => '+225 07 01 23 45',
+            'is_active' => true,
+        ]
+    );
+
+    // --- 3. CRÉATION DU RENDEZ-VOUS POUR AUJOURD'HUI ---
+    // Note : Ta capture d'écran montre la date du 08/01/2026
+    Appointment::create([
+        'patient_id' => $newPatient->id,
+        'doctor_id' => $doctor->id,
+        'appointment_datetime' => '2026-01-08 14:00:00', // Heure fixée pour aujourd'hui
+        'service_id' => 7,
+        'hospital_id' => $hospital2->id,
+        'status' => 'scheduled',
+        'reason' => 'Test de visibilité médecin',
+        'type' => 'consultation',
+    ]);
+
+    $this->command->info('✅ Patient Kouadio Konan ajouté pour le Dr. Kouamé Jean le 08/01/2026');
+
+    // --- 5. CRÉATION DU PATIENT AMA ---
+    $patientAma = Patient::updateOrCreate(
+        ['id' => 12],
+        [
+            'name' => 'Kouassi Ama',
+            'gender' => 'Femme',
+            'dob' => '1995-05-15',
+            'hospital_id' => $hospital2->id,
+        ]
+    );
+
+    // --- 5. CRÉATION DU PATIENT Ange ---
+    $patientAnge = Patient::updateOrCreate(
+        ['id' => 13],
+        [
+            'name' => 'Kouassi Ange',
+            'gender' => 'Femme',
+            'dob' => '1995-05-15',
+            'hospital_id' => $hospital2->id,
+        ]
+    );
+
+    // --- 5. RENDEZ-VOUS POUR AMA ---
+    Appointment::updateOrCreate(
+        [
+            'patient_id' => $patientAma->id,
+            'doctor_id' => $doctor->id,
+            'appointment_datetime' => '2025-12-22 10:30:00', 
+        ],
+        [
+            'service_id' => 7,
+            'hospital_id' => $hospital2->id,
+            'status' => 'scheduled', // Valeur autorisée par votre ENUM
+            'reason' => 'Consultation Cardiologie - Suivi Ama',
+            'type' => 'consultation',
+        ]
+    );
+
+    $this->command->info('🚀 Base de données initialisée ! Ama est prête.');
+
+    // --- 5. RENDEZ-VOUS POUR Ange ---
+    Appointment::updateOrCreate(
+        [
+            'patient_id' => $patientAnge->id,
+            'doctor_id' => $doctor->id,
+            'appointment_datetime' => 'now', 
+        ],
+        [
+            'service_id' => 7,
+            'hospital_id' => $hospital2->id,
+            'status' => 'scheduled', // Valeur autorisée par votre ENUM
+            'reason' => 'Consultation Cardiologie - Suivi Ama',
+            'type' => 'consultation',
+        ]
+    );
+
+    $this->command->info('🚀 Base de données initialisée ! Ange est prête.');
+
+    // --- 6. CRÉATION DU DOSSIER DE CONSTANTES POUR Ange ---
+    PatientVital::create([
+        'patient_name' => 'Kouassi Ange',
+        'patient_ipu' => 'PAT2025001', // Assuming an IPU for Ange
+        'temperature' => 37.2,
+        'pulse' => 72,
+        'blood_pressure' => '120/80',
+        'weight' => 65.5,
+        'urgency' => 'normal',
+        'reason' => 'Consultation de routine',
+        'notes' => 'Patient en bonne santé générale',
+        'user_id' => $nurseCardio->id,
+        'hospital_id' => $hospital2->id,
+        'service_id' => 7, // Cardiologie
+    ]);
+
+    $this->command->info('✅ Dossier de constantes créé pour Ange.');
+}
+
+/**
+ * Fonction helper pour les données de base par hôpital
+ */
+ 
+
+private function seedAllData(int $hId, string $domain, string $suffix): void
     {
-        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-        
-        // Nettoyer les tables
-        Service::truncate();
-        User::truncate();
-        Patient::truncate();
-        Room::truncate();
-        
-        DB::statement('SET FOREIGN_KEY_CHECKS=1;');
-
-        // Créer les services
-        $this->seedServices();
-
-        // Créer les utilisateurs
-        $this->seedUsers();
-
-        // Créer des patients de test
-        $this->seedPatients();
-
-        // Créer des chambres
-        $this->seedRooms();
-
-        $this->command->info('✅ Base de données initialisée avec succès!');
+        $this->seedServices($hId);
+        $this->seedUsers($hId, $domain, $suffix);
+        $this->seedPatients($hId, $suffix);
+        $this->seedRooms($hId);
     }
 
-    private function seedServices(): void
+     
+    private function seedServices(int $hId): void
     {
+        // On ajoute l'ID de l'hôpital au code pour éviter le conflit unique
+        // Exemple : URG-1 et URG-2
         $services = [
-            ['name' => 'Urgences', 'code' => 'URG', 'description' => 'Service des urgences', 'is_active' => true],
-            ['name' => 'Cardiologie', 'code' => 'CARD', 'description' => 'Service de cardiologie', 'is_active' => true],
-            ['name' => 'Pédiatrie', 'code' => 'PED', 'description' => 'Service de pédiatrie', 'is_active' => true],
-            ['name' => 'Chirurgie', 'code' => 'CHIR', 'description' => 'Service de chirurgie générale', 'is_active' => true],
-            ['name' => 'Maternité', 'code' => 'MAT', 'description' => 'Service de maternité', 'is_active' => true],
-            ['name' => 'Radiologie', 'code' => 'RAD', 'description' => 'Service de radiologie', 'is_active' => true],
-            ['name' => 'Oncologie', 'code' => 'ONC', 'description' => 'Service d\'oncologie', 'is_active' => true],
+            ['hospital_id' => $hId, 'name' => 'Urgences', 'code' => 'URG-' . $hId, 'description' => 'Service des urgences', 'consultation_price' => 15000, 'is_active' => true],
+            ['hospital_id' => $hId, 'name' => 'Cardiologie', 'code' => 'CARD-' . $hId, 'description' => 'Service de cardiologie', 'consultation_price' => 25000, 'is_active' => true],
+            ['hospital_id' => $hId, 'name' => 'Pédiatrie', 'code' => 'PED-' . $hId, 'description' => 'Service de pédiatrie', 'consultation_price' => 20000, 'is_active' => true],
+            ['hospital_id' => $hId, 'name' => 'Chirurgie', 'code' => 'CHIR-' . $hId, 'description' => 'Service de chirurgie générale', 'consultation_price' => 30000, 'is_active' => true],
+            ['hospital_id' => $hId, 'name' => 'Maternité', 'code' => 'MAT-' . $hId, 'description' => 'Service de maternité', 'consultation_price' => 18000, 'is_active' => true],
         ];
 
         foreach ($services as $service) {
             Service::create($service);
         }
-
-        $this->command->info('✓ Services créés');
     }
+         
+    
 
-    private function seedUsers(): void
+    private function seedUsers(int $hId, string $domain, string $suffix): void
     {
         // Admin Principal
         User::create([
-            'name' => 'Admin Système',
-            'email' => 'admin@hospisis.ci',
+            'hospital_id' => $hId,
+            'name' => "Admin Système $suffix",
+            'email' => "admin@$domain",
             'password' => Hash::make('password'),
             'role' => 'admin',
-            'service_id' => null,
             'is_active' => true,
-            'mfa_enabled' => false,
         ]);
 
         // Responsable Administratif
         User::create([
-            'name' => 'Sophie Martin',
-            'email' => 'admin.responsable@hospisis.ci',
+            'hospital_id' => $hId,
+            'name' => "Sophie Martin $suffix",
+            'email' => "admin.responsable@$domain",
             'password' => Hash::make('password'),
             'role' => 'administrative',
-            'service_id' => null,
-            'phone' => '+225 07 00 00 01',
             'is_active' => true,
-            'mfa_enabled' => false,
         ]);
 
-        // Médecins par service
-        $doctors = [
-            ['name' => 'Dr. Jean Kouassi', 'email' => 'dr.kouassi@hospisis.ci', 'service' => 'Cardiologie', 'registration' => 'MED2024001'],
-            ['name' => 'Dr. Marie Bamba', 'email' => 'dr.bamba@hospisis.ci', 'service' => 'Pédiatrie', 'registration' => 'MED2024002'],
-            ['name' => 'Dr. Paul N\'Guessan', 'email' => 'dr.nguessan@hospisis.ci', 'service' => 'Chirurgie', 'registration' => 'MED2024003'],
-            ['name' => 'Dr. Fatou Diallo', 'email' => 'dr.diallo@hospisis.ci', 'service' => 'Maternité', 'registration' => 'MED2024004'],
-            ['name' => 'Dr. Amadou Traoré', 'email' => 'dr.traore@hospisis.ci', 'service' => 'Urgences', 'registration' => 'MED2024005'],
-        ];
+       
+    // ... (Admin et Responsable déjà là)
 
-        foreach ($doctors as $doctor) {
-            User::create([
-                'name' => $doctor['name'],
-                'email' => $doctor['email'],
-                'password' => Hash::make('password'),
-                'role' => 'doctor',
-                'service_id' => Service::where('name', $doctor['service'])->first()->id,
-                'registration_number' => $doctor['registration'],
-                'phone' => '+225 07 ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99),
-                'is_active' => true,
-                'mfa_enabled' => false,
-            ]);
-        }
+    // Médecin INTERNE (Travaille sur place)
+    User::create([
+        'hospital_id' => $hId,
+        'name' => "Dr. Interne Traoré ($suffix)",
+        'email' => "interne@$domain",
+        'password' => Hash::make('password'),
+        'role' => 'internal_doctor',
+        'service_id' => Service::where('hospital_id', $hId)->first()->id,
+        'is_active' => true,
+    ]);
 
-        // Infirmiers
-        $nurses = [
-            ['name' => 'Infirmière Aya Touré', 'email' => 'inf.toure@hospisis.ci', 'service' => 'Cardiologie'],
-            ['name' => 'Infirmier Marc Koné', 'email' => 'inf.kone@hospisis.ci', 'service' => 'Pédiatrie'],
-            ['name' => 'Infirmière Aïcha Ouattara', 'email' => 'inf.ouattara@hospisis.ci', 'service' => 'Chirurgie'],
-            ['name' => 'Infirmière Emma Yao', 'email' => 'inf.yao@hospisis.ci', 'service' => 'Maternité'],
-            ['name' => 'Infirmier David Sanogo', 'email' => 'inf.sanogo@hospisis.ci', 'service' => 'Urgences'],
-        ];
+    // Médecin EXTERNE (Cabinet privé / Consultant)
+    User::create([
+        'hospital_id' => $hId,
+        'name' => "Dr. Externe Bakayoko ($suffix)",
+        'email' => "externe@$domain",
+        'password' => Hash::make('password'),
+        'role' => 'external_doctor',
+        'is_active' => true,
+    ]);
 
-        foreach ($nurses as $nurse) {
-            User::create([
-                'name' => $nurse['name'],
-                'email' => $nurse['email'],
-                'password' => Hash::make('password'),
-                'role' => 'nurse',
-                'service_id' => Service::where('name', $nurse['service'])->first()->id,
-                'phone' => '+225 05 ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99),
-                'is_active' => true,
-                'mfa_enabled' => false,
-            ]);
-        }
-
-        $this->command->info('✓ Utilisateurs créés (mot de passe par défaut: password)');
-    }
-
-    private function seedPatients(): void
-    {
-        $firstNames = ['Kofi', 'Ama', 'Koffi', 'Adjoua', 'Kouadio', 'N\'Goran', 'Yasmine', 'Ibrahim', 'Mariam', 'Seydou'];
-        $lastNames = ['Kouassi', 'Yao', 'Koné', 'Traoré', 'Bamba', 'Ouattara', 'N\'Guessan', 'Diabaté', 'Sanogo', 'Touré'];
-        $bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-        $allergies = [
-            ['Pénicilline'],
-            ['Aspirine', 'Ibuprofène'],
-            ['Arachides'],
-            ['Latex'],
-            [],
-        ];
-
-        for ($i = 0; $i < 50; $i++) {
-            Patient::create([
-                'ipu' => Patient::generateIpu(),
-                'first_name' => $firstNames[array_rand($firstNames)],
-                'name' => $lastNames[array_rand($lastNames)],
-                'dob' => now()->subYears(rand(1, 80))->subDays(rand(0, 365)),
-                'gender' => ['M', 'F'][rand(0, 1)],
-                'address' => 'Abidjan, ' . ['Cocody', 'Yopougon', 'Treichville', 'Adjamé', 'Plateau'][rand(0, 4)],
-                'city' => 'Abidjan',
-                'postal_code' => sprintf('%02d BP %d', rand(1, 30), rand(100, 999)),
-                'phone' => '+225 ' . ['07', '05', '01'][rand(0, 2)] . ' ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99),
-                'email' => $i < 20 ? 'patient' . ($i + 1) . '@email.ci' : null,
-                'emergency_contact_name' => $firstNames[array_rand($firstNames)] . ' ' . $lastNames[array_rand($lastNames)],
-                'emergency_contact_phone' => '+225 07 ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99),
-                'blood_group' => $bloodGroups[array_rand($bloodGroups)],
-                'allergies' => $allergies[array_rand($allergies)],
-                'medical_history' => rand(0, 1) ? 'Antécédents: ' . ['Hypertension', 'Diabète', 'Asthme', 'Aucun'][rand(0, 3)] : null,
-                'is_active' => true,
-            ]);
-        }
-
-        $this->command->info('✓ 50 patients de test créés');
-    }
-
-    private function seedRooms(): void
-    {
-        $services = Service::all();
-
-        foreach ($services as $service) {
-            // Créer des chambres pour chaque service
-            $roomCount = rand(5, 15);
-
-            for ($i = 1; $i <= $roomCount; $i++) {
-                Room::create([
-                    'room_number' => $service->code . '-' . str_pad($i, 3, '0', STR_PAD_LEFT),
-                    'bed_capacity' => rand(1, 4),
-                    'service_id' => $service->id,
-                    'status' => ['available', 'available', 'available', 'occupied', 'cleaning'][rand(0, 4)],
-                    'type' => ['standard', 'standard', 'VIP', 'isolation'][rand(0, 3)],
-                    'is_active' => true,
-                ]);
-            }
-        }
-
-        $this->command->info('✓ Chambres créées pour tous les services');
-    }
+    // Infirmier
+    User::create([
+        'hospital_id' => $hId,
+        'name' => "Infirmier Koffi ($suffix)",
+        'email' => "nurse@$domain",
+        'password' => Hash::make('password'),
+        'role' => 'nurse',
+        'service_id' => Service::where('hospital_id', $hId)->first()->id,
+        'is_active' => true,
+    ]);
 }
 
-/**
- * Seeder pour les disponibilités des médecins
- */
-class DoctorAvailabilitySeeder extends Seeder
-{
-    public function run(): void
+    
+
+    private function seedPatients(int $hId, string $suffix): void
     {
-        $doctors = User::where('role', 'doctor')->get();
+        $firstNames = ['Kofi', 'Ama', 'Koffi', 'Adjoua', 'Kouadio'];
+        $lastNames = ['Kouassi', 'Yao', 'Koné', 'Traoré', 'Bamba'];
 
-        $daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-
-        foreach ($doctors as $doctor) {
-            foreach ($daysOfWeek as $day) {
-                \App\Models\DoctorAvailability::create([
-                    'doctor_id' => $doctor->id,
-                    'day_of_week' => $day,
-                    'start_time' => '08:00',
-                    'end_time' => '17:00',
-                    'slot_duration' => 30,
-                    'is_active' => true,
-                ]);
-            }
+        for ($i = 0; $i < 10; $i++) { // 10 patients par hôpital pour l'exemple
+            Patient::create([
+                'hospital_id' => $hId,
+                'ipu' => 'IPU-'.$hId.rand(100000, 999999),
+                'first_name' => $firstNames[array_rand($firstNames)],
+                'name' => $lastNames[array_rand($lastNames)] . " ($suffix)",
+                'dob' => now()->subYears(rand(1, 80)),
+                'gender' => ['Homme', 'Femme'][rand(0, 1)],
+                'address' => 'Abidjan',
+                'city' => 'Abidjan',
+                'phone' => '+225 07 ' . rand(10, 99) . ' 00 00',
+                'is_active' => true,
+            ]);
         }
-
-        $this->command->info('✓ Disponibilités des médecins configurées');
     }
-} 
+
+    private function seedRooms(int $hId): void
+    {
+        $services = Service::where('hospital_id', $hId)->get();
+        foreach ($services as $service) {
+            Room::create([
+                'hospital_id' => $hId,
+                'room_number' => $service->code . '-' . rand(100, 999),
+                'bed_capacity' => rand(1, 4),
+                'service_id' => $service->id,
+                'status' => 'available',
+                'type' => 'standard',
+                'is_active' => true,
+            ]);
+        }
+    }
+  
+    
+
+}

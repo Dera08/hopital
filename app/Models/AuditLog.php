@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use App\Traits\BelongsToHospital;
 
 class AuditLog extends Model
-{
+{    use BelongsToHospital;
+    
     protected $fillable = [
+        'hospital_id',
         'user_id',
         'action',
         'resource_type',

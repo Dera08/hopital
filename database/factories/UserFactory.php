@@ -29,6 +29,14 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'hospital_id' => \App\Models\Hospital::factory(),
+            'role' => 'administrative',
+            'service_id' => null,
+            'is_active' => true,
+            'phone' => fake()->phoneNumber(),
+            'registration_number' => fake()->unique()->regexify('REG-[0-9]{4}'),
+            'mfa_enabled' => false,
+            'mfa_secret' => null,
         ];
     }
 

@@ -10,70 +10,169 @@ use Carbon\Carbon;
 class DashboardController extends Controller
 {
     public function index()
-    {
-        $user = auth()->user();
-        
-        // Statistiques générales
+{
+    $user = auth()->user();
+
+// --- 1. LOGIQUE POUR L'ADMINISTRATEUR ---
+if ($user->role === 'admin' || $user->role === 'super_admin') {
+    $hospitalId = $user->hospital_id; // On définit la variable pour l'utiliser plus bas
+
+    // Calculate bed statistics dynamically
+    $bedStats = \App\Models\Room::where('hospital_id', $hospitalId)
+        ->where('is_active', true)
+        ->select('status', DB::raw('count(*) as total'))
+        ->groupBy('status')
+        ->pluck('total', 'status')
+        ->toArray();
+
+    $totalBeds = array_sum($bedStats);
+    $occupiedBeds = isset($bedStats['occupied']) ? $bedStats['occupied'] : 0;
+    $availableBeds = isset($bedStats['available']) ? $bedStats['available'] : 0;
+    $occupancyRate = $totalBeds > 0 ? round(($occupiedBeds / $totalBeds) * 100, 1) : 0;
+
+    $stats = [
+        'totalDoctors'   => \App\Models\User::where('hospital_id', $hospitalId)
+                                    ->whereIn('role', ['doctor', 'internal_doctor', 'external_doctor'])
+                                    ->where('is_active', true)
+                                    ->count(),
+
+        'totalPatients'    => \App\Models\Patient::where('hospital_id', $hospitalId)
+                                    ->where('is_active', true)
+                                    ->count(),
+
+        'totalServices'           => \App\Models\Service::where('hospital_id', $hospitalId)
+                                    ->where('is_active', true)
+                                    ->count(),
+
+        'occupancyRate'     => $occupancyRate,
+
+        'today_appointments' => \App\Models\Appointment::where('hospital_id', $hospitalId)
+                                    ->whereDate('appointment_datetime', today())
+                                    ->count(),
+        'pending_appointments' => \App\Models\Appointment::where('hospital_id', $hospitalId)
+                                    ->where('status', 'pending')
+                                    ->count(),
+        'available_beds'       => $availableBeds,
+        'total_beds'           => $totalBeds,
+        'active_alerts'        => \App\Models\ClinicalAlert::where('hospital_id', $hospitalId)
+                                    ->where('is_acknowledged', false)
+                                    ->count(),
+        'critical_alerts'      => \App\Models\ClinicalAlert::where('hospital_id', $hospitalId)
+                                    ->where('is_acknowledged', false)
+                                    ->where('severity', 'critical')
+                                    ->count(),
+    ]; // Le tableau doit se fermer ICI, après toutes les clés
+
+    $todayAppointments = $this->getTodayAppointments($user);
+    $inactiveUsers = User::where('hospital_id', $hospitalId)->where('is_active', false)->with('service')->get();
+    $recentActivities = $this->getRecentActivities($hospitalId);
+
+    return view('admin.dashboard', array_merge($stats, compact('todayAppointments', 'inactiveUsers', 'recentActivities')));
+}
+    // --- 2. LOGIQUE POUR L'INFIRMIER ---
+    if ($user->role === 'nurse' || $user->role === 'infirmier') {
         $stats = $this->getStats($user);
+        $myPatients = $this->getActiveAdmissions($user);
         
-        // Rendez-vous du jour
-        $todayAppointments = $this->getTodayAppointments($user);
+        $appointments = \App\Models\Appointment::with(['patient', 'doctor'])
+            ->whereHas('patient')
+            ->whereHas('doctor')
+            ->where('hospital_id', $user->hospital_id)
+            ->where('service_id', $user->service_id)
+            ->whereDate('appointment_datetime', '<=', today())
+            ->orderBy('appointment_datetime', 'desc')
+            ->get();
+
+        $sentFiles = \App\Models\PatientVital::where('user_id', $user->id)
+            ->latest()
+            ->take(10)
+            ->get();
         
-        // Admissions actives
-        $activeAdmissions = $this->getActiveAdmissions($user);
-        
-        // Alertes cliniques non accusées
-        $clinicalAlerts = $this->getClinicalAlerts($user);
-        
-        return view('dashboard', compact(
-            'stats',
-            'todayAppointments',
-            'activeAdmissions',
-            'clinicalAlerts'
-        ));
+        return view('nurse.dashboard', compact('stats', 'myPatients', 'appointments', 'sentFiles'));
     }
+
+    // --- 3. LOGIQUE POUR LE CAISSIER ---
+    if ($user->role === 'cashier') {
+        // Redirect cashiers to their specific dashboard
+        return redirect()->route('cashier.dashboard');
+    }
+
+    // --- 4. LOGIQUE POUR LE MÉDECIN ---
+    $stats = $this->getStats($user);
+    $todayAppointments = $this->getTodayAppointments($user);
+
+    $criticalObservations = \App\Models\ClinicalObservation::where('hospital_id', $user->hospital_id)
+        ->where('is_critical', true)
+        ->with('patient')
+        ->orderBy('observation_datetime', 'desc')
+        ->take(10)
+        ->get();
+
+    $myPatients = $this->getActiveAdmissions($user);
+    $criticalPatients = $criticalObservations->count();
+
+    // On compte les dossiers vitaux reçus
+    $pendingExams = \App\Models\PatientVital::where('hospital_id', $user->hospital_id)->count();
+
+    return view('medecin.dashboard', array_merge(compact(
+        'stats',
+        'todayAppointments',
+        'criticalObservations',
+        'myPatients',
+        'criticalPatients',
+        'pendingExams'
+    ), ['hospitalizedPatients' => $myPatients]));
+}
 
     private function getStats($user)
     {
         $stats = [];
-        
+
         // Patients actifs
-        $stats['active_patients'] = Patient::where('is_active', true)->count();
-        
+        $stats['active_patients'] = Patient::where('hospital_id', $user->hospital_id)
+            ->where('is_active', true)
+            ->count();
+
         // Rendez-vous aujourd'hui
-        $stats['today_appointments'] = Appointment::whereDate('appointment_datetime', today())
+        $stats['today_appointments'] = Appointment::where('hospital_id', $user->hospital_id)
+            ->whereDate('appointment_datetime', today())
             ->when($user->isDoctor(), function($query) use ($user) {
                 return $query->where('doctor_id', $user->id);
             })
             ->count();
-            
-        $stats['pending_appointments'] = Appointment::whereDate('appointment_datetime', today())
+
+        $stats['pending_appointments'] = Appointment::where('hospital_id', $user->hospital_id)
+            ->whereDate('appointment_datetime', today())
             ->where('status', 'scheduled')
             ->when($user->isDoctor(), function($query) use ($user) {
                 return $query->where('doctor_id', $user->id);
             })
             ->count();
-        
+
         // Statistiques des lits
-        $bedStats = Room::select('status', DB::raw('count(*) as total'))
+        $bedStats = Room::where('hospital_id', $user->hospital_id)
+            ->select('status', DB::raw('count(*) as total'))
             ->groupBy('status')
             ->pluck('total', 'status')
             ->toArray();
-            
-        $stats['available_beds'] = $bedStats['available'] ?? 0;
-        $stats['occupied_beds'] = $bedStats['occupied'] ?? 0;
-        $stats['cleaning_beds'] = $bedStats['cleaning'] ?? 0;
+
+        $stats['available_beds'] = isset($bedStats['available']) ? $bedStats['available'] : 0;
+        $stats['occupied_beds'] = isset($bedStats['occupied']) ? $bedStats['occupied'] : 0;
+        $stats['cleaning_beds'] = isset($bedStats['cleaning']) ? $bedStats['cleaning'] : 0;
         $stats['total_beds'] = array_sum($bedStats);
-        $stats['occupancy_rate'] = $stats['total_beds'] > 0 
-            ? round(($stats['occupied_beds'] / $stats['total_beds']) * 100, 1) 
+        $stats['occupancy_rate'] = $stats['total_beds'] > 0
+            ? round(($stats['occupied_beds'] / $stats['total_beds']) * 100, 1)
             : 0;
-        
+
         // Alertes cliniques
-        $stats['active_alerts'] = ClinicalAlert::where('is_acknowledged', false)->count();
-        $stats['critical_alerts'] = ClinicalAlert::where('is_acknowledged', false)
+        $stats['active_alerts'] = ClinicalAlert::where('hospital_id', $user->hospital_id)
+            ->where('is_acknowledged', false)
+            ->count();
+        $stats['critical_alerts'] = ClinicalAlert::where('hospital_id', $user->hospital_id)
+            ->where('is_acknowledged', false)
             ->where('severity', 'critical')
             ->count();
-        
+
         return $stats;
     }
 
@@ -94,6 +193,7 @@ class DashboardController extends Controller
     private function getActiveAdmissions($user)
     {
         return Admission::with(['patient', 'room', 'doctor'])
+            ->whereHas('patient')
             ->where('status', 'active')
             ->when($user->isDoctor(), function($query) use ($user) {
                 return $query->where('doctor_id', $user->id);
@@ -229,10 +329,98 @@ class DashboardController extends Controller
         return view('audit-logs.show', compact('log'));
     }
 
+    private function getRecentActivities($hospitalId)
+    {
+        $activities = collect();
+
+        // Recent admissions
+        $recentAdmissions = Admission::with(['patient', 'room', 'doctor'])
+            ->where('hospital_id', $hospitalId)
+            ->latest('admission_date')
+            ->take(3)
+            ->get()
+            ->map(function ($admission) {
+                return [
+                    'type' => 'admission',
+                    'user' => isset($admission->doctor->name) ? $admission->doctor->name : 'Admin Système',
+                    'message' => "Patient {$admission->patient->name} admis en " . (isset($admission->room->service->name) ? $admission->room->service->name : 'service') . " - Chambre " . (isset($admission->room->room_number) ? $admission->room->room_number : 'N/A'),
+                    'time' => $admission->admission_date,
+                    'icon' => 'fas fa-user-plus',
+                    'color' => 'success'
+                ];
+            });
+
+        // Recent appointments
+        $recentAppointments = Appointment::with(['patient', 'doctor'])
+            ->where('hospital_id', $hospitalId)
+            ->where('status', 'completed')
+            ->latest('appointment_datetime')
+            ->take(3)
+            ->get()
+            ->map(function ($appointment) {
+                return [
+                    'type' => 'appointment',
+                    'user' => $appointment->doctor->name ?? 'Médecin',
+                    'message' => "Rendez-vous terminé avec {$appointment->patient->name}",
+                    'time' => $appointment->appointment_datetime,
+                    'icon' => 'fas fa-calendar-check',
+                    'color' => 'primary'
+                ];
+            });
+
+        // Recent clinical observations
+        $recentObservations = \App\Models\ClinicalObservation::with(['patient', 'user'])
+            ->where('hospital_id', $hospitalId)
+            ->latest('created_at')
+            ->take(3)
+            ->get()
+            ->map(function ($observation) {
+                return [
+                    'type' => 'observation',
+                    'user' => $observation->user->name ?? 'Personnel médical',
+                    'message' => "Observation clinique ajoutée pour {$observation->patient->name} - {$observation->type}",
+                    'time' => $observation->created_at,
+                    'icon' => 'fas fa-stethoscope',
+                    'color' => 'info'
+                ];
+            });
+
+        // Recent medical records
+        $recentRecords = \App\Models\MedicalRecord::with(['patient', 'recordedBy'])
+            ->where('hospital_id', $hospitalId)
+            ->latest('created_at')
+            ->take(3)
+            ->get()
+            ->map(function ($record) {
+                return [
+                    'type' => 'record',
+                    'user' => $record->recordedBy->name ?? 'Médecin',
+                    'message' => "Dossier médical mis à jour pour {$record->patient->name}",
+                    'time' => $record->created_at,
+                    'icon' => 'fas fa-file-medical',
+                    'color' => 'warning'
+                ];
+            });
+
+        // Combine all activities and sort by time
+        $activities = $recentAdmissions
+            ->concat($recentAppointments)
+            ->concat($recentObservations)
+            ->concat($recentRecords)
+            ->sortByDesc('time')
+            ->take(10)
+            ->map(function ($activity) {
+                $activity['time_ago'] = Carbon::parse($activity['time'])->diffForHumans();
+                return $activity;
+            });
+
+        return $activities;
+    }
+
     public function settings()
     {
         $user = auth()->user();
-        
+
         return view('settings', compact('user'));
     }
 }

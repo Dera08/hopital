@@ -10,11 +10,11 @@
             <div class="flex justify-between items-center">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">
-                        Bienvenue, Dr. {{ Auth::user()->name }}
+                        Bienvenue, Dr. {{ Auth::user()?->name ?? 'User' }}
                     </h1>
                     <p class="mt-1 text-sm text-gray-500">
-                        {{ Auth::user()->service->name ?? 'Service non assigné' }} • 
-                        <span class="capitalize">{{ Auth::user()->role }}</span>
+                        {{ Auth::user()?->service?->name ?? 'Service non assigné' }} •
+                        <span class="capitalize">{{ Auth::user()?->role ?? 'user' }}</span>
                     </p>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -270,9 +270,6 @@
                     <div class="p-6 space-y-3">
                         <a href="{{ route('patients.create') }}" class="block w-full bg-blue-600 hover:bg-blue-700 text-white text-center py-2 px-4 rounded-lg font-medium transition">
                             + Nouveau Patient
-                        </a>
-                        <a href="{{ route('appointments.create') }}" class="block w-full bg-purple-600 hover:bg-purple-700 text-white text-center py-2 px-4 rounded-lg font-medium transition">
-                            + Nouveau RDV
                         </a>
                         <a href="{{ route('admissions.create') }}" class="block w-full bg-green-600 hover:bg-green-700 text-white text-center py-2 px-4 rounded-lg font-medium transition">
                             + Nouvelle Admission

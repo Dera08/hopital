@@ -1,0 +1,199 @@
+@extends('layouts.app')
+
+@section('content')
+<div class="min-h-screen bg-[#f8fafc]"> 
+    <div class="bg-white border-b border-gray-100 shadow-sm">
+        <div class="max-w-7xl mx-auto px-6 py-8">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-6">
+                <div class="flex items-center space-x-6">
+                    <div class="h-20 w-20 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-lg flex items-center justify-center text-white ring-4 ring-blue-50">
+                        <span class="text-3xl font-black">
+                            {{ strtoupper(substr(auth()->user()->name ?? 'DR', 0, 2)) }}
+                        </span>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Dr. {{ auth()->user()->name ?? 'Médecin' }}</h1>
+                        <div class="flex flex-wrap items-center gap-3 mt-2">
+                            <span class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-bold">
+                                ⚕️ {{ auth()->user()->service->name ?? 'Service Général' }}
+                            </span>
+                            <span class="text-gray-400 font-medium flex items-center text-sm">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                {{ now()->isoFormat('dddd D MMMM') }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <div class="text-right">
+                        <div class="text-2xl font-black text-gray-800">{{ now()->format('H:i') }}</div>
+                        <p class="text-xs font-bold text-green-600 uppercase tracking-widest">En service</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-6 py-10">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <div class="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-500 text-sm font-bold uppercase tracking-wider mb-1">Mes Patients</p>
+                        <p class="text-5xl font-black text-gray-900">{{ $hospitalizedPatients->count() }}</p>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded-2xl group-hover:bg-blue-600 transition-colors">
+                        <svg class="w-8 h-8 text-blue-600 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-500 text-sm font-bold uppercase tracking-wider mb-1">En attente</p>
+                        <p class="text-5xl font-black text-orange-500">{{ $pendingExams ?? 0 }}</p>
+                    </div>
+                    <div class="p-4 bg-orange-50 rounded-2xl">
+                        <svg class="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm {{ ($criticalPatients ?? 0) > 0 ? 'ring-2 ring-red-500 animate-pulse' : '' }}">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-500 text-sm font-bold uppercase tracking-wider mb-1">Critique</p>
+                        <p class="text-5xl font-black text-red-600">{{ $criticalPatients ?? 0 }}</p>
+                    </div>
+                    <div class="p-4 bg-red-50 rounded-2xl">
+                        <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="patients-section">
+            <div class="flex items-center justify-between mb-8">
+                <h2 class="text-2xl font-black text-gray-800 italic uppercase tracking-tighter">Suivi des hospitalisations</h2>
+                <div class="flex gap-2 bg-gray-100 p-1 rounded-2xl">
+                    <button onclick="filterPatients('all')" id="btn-all" class="filter-btn px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white shadow-sm text-blue-600">Tous</button>
+                    <button onclick="filterPatients('critical')" id="btn-critical" class="filter-btn px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-200">Critiques</button>
+                </div>
+            </div>
+
+            <div id="patients-list">
+                @forelse($hospitalizedPatients as $admission)
+                    @php
+                        $patient = $admission->patient;
+                        if (!$patient) continue;
+
+                        $signes = $admission->derniersSignes;
+                        $isCritical = ($admission->alert_level === 'critical') ||
+                                      ($signes && ($signes->temperature >= 38.5 || $signes->temperature <= 35.0)) ||
+                                      ($signes && ($signes->pulse >= 120 || $signes->pulse <= 50));
+                    @endphp
+
+                    <div class="patient-card mb-6 bg-white rounded-[2rem] border {{ $isCritical ? 'border-red-100 ring-2 ring-red-50' : 'border-gray-100' }} shadow-sm overflow-hidden transition-all hover:shadow-xl" data-alert="{{ $isCritical ? 'critical' : 'stable' }}">
+                        <div class="p-8">
+                            <div class="flex flex-col lg:flex-row gap-8">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-4 mb-6">
+                                        <div class="h-16 w-16 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-black text-xl border border-blue-100 uppercase">
+                                            {{ substr($patient->first_name, 0, 1) }}{{ substr($patient->name, 0, 1) }}
+                                        </div>
+                                        <div>
+                                            <h3 class="text-2xl font-black text-gray-900 leading-tight uppercase">{{ $patient->full_name }}</h3>
+                                            <p class="text-gray-500 font-medium">{{ $patient->age }} ANS • IPU: <span class="font-mono text-xs">{{ $patient->ipu }}</span></p>
+                                        </div>
+                                        @if($isCritical)
+                                            <span class="ml-auto bg-red-600 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest animate-pulse">Urgence Critique</span>
+                                        @endif
+                                    </div>
+
+                                    <div class="flex flex-wrap gap-6">
+                                        <div class="flex items-center space-x-3">
+                                            <span class="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shadow-sm">🌡️</span>
+                                            <div>
+                                                <p class="text-[9px] text-gray-400 font-black uppercase">Température</p>
+                                                <p class="font-black {{ ($signes && ($signes->temperature >= 38.5 || $signes->temperature <= 35.0)) ? 'text-red-600' : 'text-gray-800' }}">
+                                                    {{ $signes->temperature ?? '--' }}°C
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center space-x-3">
+                                            <span class="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shadow-sm">💓</span>
+                                            <div>
+                                                <p class="text-[9px] text-gray-400 font-black uppercase">Pouls / TA</p>
+                                                <p class="font-black {{ ($signes && ($signes->pulse >= 120 || $signes->pulse <= 50)) ? 'text-red-600' : 'text-gray-800' }}">
+                                                    {{ $signes->pulse ?? '--' }} <span class="text-[10px] text-gray-400 uppercase">BPM</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center space-x-3">
+                                            <span class="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-pink-500 font-black text-xs shadow-sm">{{ $patient->blood_group ?? '??' }}</span>
+                                            <div>
+                                                <p class="text-[9px] text-gray-400 font-black uppercase">Groupe</p>
+                                                <p class="font-black text-gray-800 italic uppercase">Sanguin</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="lg:w-64 flex flex-col gap-3 justify-center">
+                                    <a href="{{ route('patients.show', $patient->id ?? '#') }}" class="flex items-center justify-center gap-2 w-full py-4 bg-gray-900 text-white rounded-2xl font-black hover:bg-black transition-all shadow-lg text-xs tracking-widest uppercase">
+                                        Ouvrir Dossier
+                                    </a>
+                                    <a href="{{ route('prescriptions.create', ['patient_id' => $patient->id ?? '#']) }}" class="flex items-center justify-center gap-2 w-full py-4 bg-blue-50 text-blue-600 rounded-2xl font-black hover:bg-blue-100 transition-all border border-blue-100 text-xs tracking-widest uppercase">
+                                        Prescription
+                                    </a>
+                                    <form action="{{ route('medical_records.discharge', $admission->id) }}" method="POST" onsubmit="return confirm('Confirmer la sortie du patient ?')">
+                                        @csrf
+                                        @method('POST')
+                                        <button type="submit" class="flex items-center justify-center gap-2 w-full py-4 bg-red-600 text-white rounded-2xl font-black hover:bg-red-700 transition-all shadow-lg text-xs tracking-widest uppercase">
+                                            Sortir Patient
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @empty
+                    <div class="text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-200">
+                        <p class="text-gray-400 font-bold uppercase tracking-widest">Aucun patient hospitalisé.</p>
+                    </div>
+                @endforelse
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function filterPatients(type) {
+        const cards = document.querySelectorAll('.patient-card');
+        const btnAll = document.getElementById('btn-all');
+        const btnCritical = document.getElementById('btn-critical');
+
+        cards.forEach(card => {
+            if (type === 'all') {
+                card.style.display = 'block';
+                // Update UI Buttons
+                btnAll.className = "filter-btn px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white shadow-sm text-blue-600";
+                btnCritical.className = "filter-btn px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-200";
+            } else {
+                if (card.getAttribute('data-alert') === 'critical') {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+                // Update UI Buttons
+                btnCritical.className = "filter-btn px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white shadow-sm text-red-600";
+                btnAll.className = "filter-btn px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-200";
+            }
+        });
+    }
+    
+    // S'assurer que tout est visible au chargement
+    window.onload = () => filterPatients('all');
+</script>
+@endsection

@@ -10,7 +10,7 @@ class AdmissionController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Admission::with(['patient', 'room.service', 'doctor']);
+        $query = Admission::with(['patient', 'bed','room.service', 'doctor']);
 
         // Filtrer par statut
         if ($request->filled('status')) {
@@ -19,7 +19,7 @@ class AdmissionController extends Controller
             // Par défaut, afficher les admissions actives
             $query->where('status', 'active');
         }
-
+          
         // Filtrer par service
         $user = auth()->user();
         if (!$user->isAdmin() && $user->service_id) {
@@ -48,79 +48,64 @@ class AdmissionController extends Controller
                 ->whereDate('discharge_date', '<=', today())
                 ->count(),
         ];
+        // On ajoute 'bed' dans le "with"
+      
 
         return view('admissions.index', compact('admissions', 'stats'));
     }
 
-    public function create(Request $request)
-    {
-        $patientId = $request->input('patient_id');
-        $patient = $patientId ? Patient::findOrFail($patientId) : null;
+   public function create(Request $request)
+{
+    $patientId = $request->input('patient_id');
+    $patient = $patientId ? Patient::findOrFail($patientId) : null;
+    $user = auth()->user();
 
-        $user = auth()->user();
+    // Chambres disponibles
+    $rooms = Room::where('status', 'available')->get();
 
-        // Chambres disponibles
-        $rooms = Room::where('status', 'available')
-            ->where('is_active', true)
-            ->when(!$user->isAdmin() && $user->service_id, function($q) use ($user) {
-                return $q->where('service_id', $user->service_id);
-            })
-            ->with('service')
-            ->get();
+    // --- AJOUT : RÉCUPÉRER LES LITS DISPONIBLES ---
+    $availableBeds = \App\Models\Bed::where('is_available', true)->get();
 
-        // Médecins
-        $doctors = User::where('role', 'doctor')
-            ->where('is_active', true)
-            ->when(!$user->isAdmin() && $user->service_id, function($q) use ($user) {
-                return $q->where('service_id', $user->service_id);
-            })
-            ->get();
+    $doctors = User::where('role', 'doctor')->get();
 
-        return view('admissions.create', compact('patient', 'rooms', 'doctors'));
-    }
+    // Ajoutez 'availableBeds' au compact
+    return view('admissions.create', compact('patient', 'rooms', 'doctors', 'availableBeds'));
+}
 
     public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'patient_id' => 'required|exists:patients,id',
-            'room_id' => 'required|exists:rooms,id',
-            'doctor_id' => 'required|exists:users,id',
-            'admission_date' => 'required|date',
-            'admission_type' => 'required|in:emergency,scheduled,transfer',
-            'admission_reason' => 'required|string|max:1000',
-        ]);
+{
+    $validated = $request->validate([
+        'patient_id' => 'required|exists:patients,id',
+        'room_id' => 'required|exists:rooms,id',
+        'bed_id' => 'required|exists:beds,id', // AJOUT : Lit obligatoire
+        'doctor_id' => 'required|exists:users,id',
+        'admission_date' => 'required|date',
+        'admission_type' => 'required|in:emergency,scheduled,transfer',
+        'admission_reason' => 'required|string|max:1000',
+    ]);
 
-        DB::beginTransaction();
-        try {
-            // Vérifier que la chambre est disponible
-            $room = Room::findOrFail($validated['room_id']);
-            if ($room->status !== 'available') {
-                return back()->withInput()->withErrors([
-                    'room_id' => 'Cette chambre n\'est pas disponible.'
-                ]);
-            }
+    DB::beginTransaction();
+    try {
+        $room = Room::findOrFail($validated['room_id']);
+        $bed = \App\Models\Bed::findOrFail($validated['bed_id']);
 
-            // Créer l'admission
-            $admission = Admission::create($validated);
+        // Créer l'admission (vérifiez que bed_id est dans le $fillable de Admission)
+        $admission = Admission::create($validated);
 
-            // Mettre à jour le statut de la chambre
-            $room->update(['status' => 'occupied']);
+        // --- ÉTAPE CRUCIALE ---
+        // 1. On occupe le lit
+        $bed->update(['is_available' => false]);
+        
+        // 2. On occupe la chambre
+        $room->update(['status' => 'occupied']);
 
-            // Journalisation
-            AuditLog::log('create', 'Admission', $admission->id, [
-                'description' => 'Nouvelle admission patient',
-                'new' => $admission->toArray()
-            ]);
-
-            DB::commit();
-
-            return redirect()->route('admissions.show', $admission)
-                           ->with('success', 'Admission enregistrée avec succès.');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->withInput()->withErrors(['error' => 'Erreur lors de l\'admission.']);
-        }
+        DB::commit();
+        return redirect()->route('admissions.show', $admission)->with('success', 'Patient admis au lit ' . $bed->bed_number);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return back()->withInput()->withErrors(['error' => 'Erreur lors de l\'admission.']);
     }
+}
 
     public function show(Admission $admission)
     {

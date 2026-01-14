@@ -7,10 +7,19 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     public function up(): void
-    {
-        // Table des services hospitaliers
+    { // 1. Table des Hôpitaux (La racine)
+        Schema::create('hospitals', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('slug')->unique();
+            $table->string('address')->nullable();
+            $table->timestamps();
+        });
+
+        // 2. Table des services
         Schema::create('services', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete(); 
             $table->string('name');
             $table->string('code')->unique();
             $table->text('description')->nullable();
@@ -18,43 +27,35 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // Modifier la table users existante au lieu de la créer
+        // 3. Modification de la table Users
         Schema::table('users', function (Blueprint $table) {
-            // Vérifier si les colonnes n'existent pas déjà
+            if (!Schema::hasColumn('users', 'hospital_id')) {
+                $table->foreignId('hospital_id')->nullable()->after('id')->constrained()->cascadeOnDelete();
+            }
             if (!Schema::hasColumn('users', 'role')) {
                 $table->enum('role', ['admin', 'doctor', 'nurse', 'administrative'])->default('administrative')->after('password');
             }
             if (!Schema::hasColumn('users', 'service_id')) {
                 $table->foreignId('service_id')->nullable()->after('role')->constrained()->nullOnDelete();
             }
-            if (!Schema::hasColumn('users', 'is_active')) {
-                $table->boolean('is_active')->default(true)->after('service_id');
-            }
-            if (!Schema::hasColumn('users', 'phone')) {
-                $table->string('phone')->nullable()->after('is_active');
-            }
-            if (!Schema::hasColumn('users', 'registration_number')) {
-                $table->string('registration_number')->nullable()->after('phone');
-            }
-            if (!Schema::hasColumn('users', 'mfa_enabled')) {
-                $table->boolean('mfa_enabled')->default(false)->after('registration_number');
-            }
-            if (!Schema::hasColumn('users', 'mfa_secret')) {
-                $table->string('mfa_secret')->nullable()->after('mfa_enabled');
-            }
-            if (!Schema::hasColumn('users', 'deleted_at')) {
-                $table->softDeletes();
-            }
+            // ... (tes autres colonnes phone, registration, etc.)
+            if (!Schema::hasColumn('users', 'is_active')) $table->boolean('is_active')->default(true);
+            if (!Schema::hasColumn('users', 'phone')) $table->string('phone')->nullable();
+            if (!Schema::hasColumn('users', 'registration_number')) $table->string('registration_number')->nullable();
+            if (!Schema::hasColumn('users', 'mfa_enabled')) $table->boolean('mfa_enabled')->default(false);
+            if (!Schema::hasColumn('users', 'mfa_secret')) $table->string('mfa_secret')->nullable();
+            if (!Schema::hasColumn('users', 'deleted_at')) $table->softDeletes();
         });
 
-        // Table des patients
+        // 4. Table des patients
         Schema::create('patients', function (Blueprint $table) {
-            $table->id();
-            $table->string('ipu')->unique()->comment('Identifiant Patient Unique');
+             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete(); // AJOUT ICI
+            $table->string('ipu')->unique();
             $table->string('name');
             $table->string('first_name');
             $table->date('dob')->comment('Date of Birth');
-            $table->enum('gender', ['M', 'F', 'Other']);
+            $table->enum('gender', ['Homme', 'Femme', 'Other']);
             $table->string('address')->nullable();
             $table->string('city')->nullable();
             $table->string('postal_code')->nullable();
@@ -70,150 +71,105 @@ return new class extends Migration
             $table->softDeletes();
         });
 
-        // Table des chambres/lits
+        // 5. Table des chambres
         Schema::create('rooms', function (Blueprint $table) {
-            $table->id();
-            $table->string('room_number');
+    $table->id();
+    $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
+     $table->string('room_number');
             $table->integer('bed_capacity')->default(1);
             $table->foreignId('service_id')->constrained()->cascadeOnDelete();
             $table->enum('status', ['available', 'occupied', 'cleaning', 'maintenance'])->default('available');
             $table->string('type')->nullable()->comment('standard, VIP, isolation');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
-        });
-
-        // Table des admissions
+});
+        // 6. Table des admissions
         Schema::create('admissions', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
             $table->foreignId('room_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('doctor_id')->constrained('users')->cascadeOnDelete();
             $table->dateTime('admission_date');
-            $table->dateTime('discharge_date')->nullable();
-            $table->enum('admission_type', ['emergency', 'scheduled', 'transfer'])->default('scheduled');
             $table->enum('status', ['active', 'discharged', 'transferred'])->default('active');
-            $table->text('admission_reason')->nullable();
-            $table->text('discharge_summary')->nullable();
             $table->timestamps();
         });
 
-        // Table des rendez-vous
+        // 7. Table des rendez-vous
         Schema::create('appointments', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
             $table->foreignId('doctor_id')->constrained('users')->cascadeOnDelete();
-            $table->foreignId('service_id')->constrained()->cascadeOnDelete();
             $table->dateTime('appointment_datetime');
-            $table->integer('duration')->default(30)->comment('Duration in minutes');
-            $table->enum('status', ['scheduled', 'confirmed', 'cancelled', 'completed', 'no_show'])->default('scheduled');
-            $table->enum('type', ['consultation', 'follow_up', 'emergency'])->default('consultation');
-            $table->boolean('is_recurring')->default(false);
-            $table->string('recurrence_pattern')->nullable();
-            $table->text('reason')->nullable();
-            $table->text('notes')->nullable();
-            $table->boolean('reminder_sent')->default(false);
-            $table->timestamp('reminder_sent_at')->nullable();
+            $table->enum('status', ['scheduled', 'confirmed', 'cancelled', 'completed', 'prepared'])->default('scheduled');
             $table->timestamps();
             $table->softDeletes();
+            // Dans ta migration create_appointments_table
+         $table->foreignId('service_id')->nullable()->constrained()->onDelete('cascade');
         });
 
-        // Table des observations cliniques (constantes)
+        // 8. Table des observations cliniques
         Schema::create('clinical_observations', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->enum('type', ['blood_pressure', 'temperature', 'heart_rate', 'weight', 'height', 'oxygen_saturation', 'glucose']);
+            $table->enum('type', ['blood_pressure', 'temperature', 'heart_rate', 'weight', 'glucose']);
             $table->string('value');
-            $table->string('unit');
-            $table->timestamp('observation_datetime');
-            $table->text('notes')->nullable();
-            $table->boolean('is_critical')->default(false);
             $table->timestamps();
         });
 
-        // Table des dossiers médicaux (notes cliniques)
+        // 9. Table des dossiers médicaux
         Schema::create('medical_records', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
             $table->foreignId('recorded_by_id')->constrained('users')->cascadeOnDelete();
-            $table->enum('record_type', ['consultation', 'diagnosis', 'history', 'note', 'report']);
             $table->text('content');
-            $table->timestamp('record_datetime');
-            $table->boolean('is_validated')->default(false);
-            $table->foreignId('validated_by_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamp('validated_at')->nullable();
             $table->timestamps();
         });
 
-        // Table des prescriptions
+        // 10. Table des prescriptions
         Schema::create('prescriptions', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
             $table->foreignId('doctor_id')->constrained('users')->cascadeOnDelete();
             $table->string('medication');
-            $table->string('dosage');
-            $table->string('frequency');
-            $table->date('start_date');
-            $table->date('end_date')->nullable();
-            $table->text('instructions')->nullable();
-            $table->boolean('is_signed')->default(false);
-            $table->timestamp('signed_at')->nullable();
-            $table->string('signature_hash')->nullable();
-            $table->boolean('allergy_checked')->default(false);
-            $table->enum('status', ['active', 'completed', 'cancelled'])->default('active');
             $table->timestamps();
         });
 
-        // Table des notes de soins infirmiers
+        // 11. Table des notes de soins
         Schema::create('nursing_notes', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
             $table->foreignId('nurse_id')->constrained('users')->cascadeOnDelete();
-            $table->foreignId('prescription_id')->nullable()->constrained()->nullOnDelete();
-            $table->enum('note_type', ['medication_administration', 'wound_care', 'hygiene', 'observation', 'other']);
             $table->text('content');
-            $table->timestamp('care_datetime');
-            $table->string('signature_hash');
             $table->timestamps();
         });
 
-        // Table des documents médicaux
+        // 12. Table des documents médicaux
         Schema::create('medical_documents', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('uploaded_by_id')->constrained('users')->cascadeOnDelete();
-            $table->enum('document_type', ['lab_result', 'imaging', 'report', 'discharge_summary', 'consent']);
             $table->string('title');
             $table->string('file_path');
-            $table->string('file_name');
-            $table->string('mime_type');
-            $table->integer('file_size');
-            $table->boolean('is_validated')->default(false);
-            $table->foreignId('validated_by_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamp('validated_at')->nullable();
-            $table->integer('version')->default(1);
-            $table->foreignId('parent_document_id')->nullable()->constrained('medical_documents')->nullOnDelete();
             $table->timestamps();
-            $table->softDeletes();
         });
 
-        // Table de facturation
+        // 13. Table de facturation
         Schema::create('invoices', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete();
             $table->string('invoice_number')->unique();
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('admission_id')->nullable()->constrained()->nullOnDelete();
-            $table->date('invoice_date');
-            $table->date('due_date')->nullable();
-            $table->decimal('subtotal', 10, 2);
-            $table->decimal('tax', 10, 2)->default(0);
             $table->decimal('total', 10, 2);
-            $table->enum('status', ['draft', 'pending', 'paid', 'cancelled'])->default('draft');
-            $table->timestamp('paid_at')->nullable();
-            $table->text('notes')->nullable();
             $table->timestamps();
         });
-
+         
         // Table des lignes de facturation
         Schema::create('invoice_items', function (Blueprint $table) {
             $table->id();
@@ -225,10 +181,12 @@ return new class extends Migration
             $table->string('code')->nullable();
             $table->timestamps();
         });
+        // ... (suite après les factures)
 
-        // Table des logs d'audit
+        // Table des logs d'audit (Liée à l'hôpital pour savoir ce qui s'est passé chez qui)
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->nullable()->constrained()->cascadeOnDelete(); // AJOUTÉ
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('action');
             $table->string('resource_type');
@@ -241,6 +199,7 @@ return new class extends Migration
             $table->timestamp('created_at');
             $table->boolean('is_encrypted')->default(false);
             
+            $table->index(['hospital_id', 'created_at']); // Index pour filtrer vite par hôpital
             $table->index(['user_id', 'created_at']);
             $table->index(['resource_type', 'resource_id']);
         });
@@ -248,6 +207,7 @@ return new class extends Migration
         // Table des alertes cliniques
         Schema::create('clinical_alerts', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete(); // AJOUTÉ
             $table->foreignId('patient_id')->constrained()->cascadeOnDelete();
             $table->foreignId('triggered_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->enum('alert_type', ['drug_interaction', 'allergy', 'critical_value', 'prescription_error']);
@@ -262,11 +222,12 @@ return new class extends Migration
         // Table de disponibilité des médecins
         Schema::create('doctor_availability', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete(); // AJOUTÉ
             $table->foreignId('doctor_id')->constrained('users')->cascadeOnDelete();
             $table->enum('day_of_week', ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']);
             $table->time('start_time');
             $table->time('end_time');
-            $table->integer('slot_duration')->default(30)->comment('Minutes');
+            $table->integer('slot_duration')->default(30);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
@@ -274,6 +235,7 @@ return new class extends Migration
         // Table des absences/congés médecins
         Schema::create('doctor_leaves', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('hospital_id')->constrained()->cascadeOnDelete(); // AJOUTÉ
             $table->foreignId('doctor_id')->constrained('users')->cascadeOnDelete();
             $table->date('start_date');
             $table->date('end_date');
@@ -281,36 +243,58 @@ return new class extends Migration
             $table->text('reason')->nullable();
             $table->timestamps();
         });
+
     }
 
-    public function down(): void
-    {
-        Schema::dropIfExists('doctor_leaves');
-        Schema::dropIfExists('doctor_availability');
-        Schema::dropIfExists('clinical_alerts');
-        Schema::dropIfExists('audit_logs');
-        Schema::dropIfExists('invoice_items');
-        Schema::dropIfExists('invoices');
-        Schema::dropIfExists('medical_documents');
-        Schema::dropIfExists('nursing_notes');
-        Schema::dropIfExists('prescriptions');
-        Schema::dropIfExists('medical_records');
-        Schema::dropIfExists('clinical_observations');
-        Schema::dropIfExists('appointments');
-        Schema::dropIfExists('admissions');
-        Schema::dropIfExists('rooms');
-        Schema::dropIfExists('patients');
-        
-        // Supprimer les colonnes ajoutées à users
-        Schema::table('users', function (Blueprint $table) {
+        public function down(): void
+     {
+      // 1. Désactiver temporairement les contraintes de clés étrangères 
+      // pour éviter les erreurs de "violation de contrainte" lors de la suppression
+      Schema::disableForeignKeyConstraints();
+
+     // 2. Liste de toutes tes tables à supprimer
+      Schema::dropIfExists('doctor_leaves');
+     Schema::dropIfExists('doctor_availability');
+     Schema::dropIfExists('clinical_alerts');
+     Schema::dropIfExists('audit_logs');
+     Schema::dropIfExists('invoice_items');
+     Schema::dropIfExists('invoices');
+     Schema::dropIfExists('medical_documents');
+     Schema::dropIfExists('nursing_notes');
+     Schema::dropIfExists('prescriptions');
+     Schema::dropIfExists('medical_records');
+     Schema::dropIfExists('clinical_observations');
+     Schema::dropIfExists('appointments');
+     Schema::dropIfExists('admissions');
+     Schema::dropIfExists('rooms');
+     Schema::dropIfExists('patients');
+     Schema::dropIfExists('services');
+     Schema::dropIfExists('hospitals'); // On termine par la table racine
+
+    // 3. Nettoyer la table users (on ne la supprime pas, on retire juste nos colonnes)
+    Schema::table('users', function (Blueprint $table) {
+        // On vérifie si la colonne existe avant de tenter de supprimer la clé étrangère
+        if (Schema::hasColumn('users', 'hospital_id')) {
+            $table->dropForeign(['hospital_id']);
+        }
+        if (Schema::hasColumn('users', 'service_id')) {
             $table->dropForeign(['service_id']);
-            $table->dropColumn([
-                'role', 'service_id', 'is_active', 'phone', 
-                'registration_number', 'mfa_enabled', 'mfa_secret', 'deleted_at'
-            ]);
-        });
-        
-        Schema::dropIfExists('services');
-    }
-};
- 
+        }
+
+        $table->dropColumn([
+            'hospital_id', 
+            'role', 
+            'service_id', 
+            'is_active', 
+            'phone', 
+            'registration_number', 
+            'mfa_enabled', 
+            'mfa_secret', 
+            'deleted_at'
+        ]);
+    });
+
+    // 4. Réactiver les contraintes
+    Schema::enableForeignKeyConstraints();
+}
+ };

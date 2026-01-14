@@ -1,0 +1,16 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+     public function up()
+{
+    Schema::table('medical_records', function (Blueprint $table) {
+        $table->text('observations')->nullable(); // Résultat du test + notes
+        $table->text('ordonnance')->nullable();   // Liste des médicaments
+    });
+}
+};
