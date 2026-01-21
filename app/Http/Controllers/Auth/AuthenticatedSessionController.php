@@ -7,7 +7,9 @@ use App\Http\Requests\Auth\LoginRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
+use App\Models\SuperAdmin;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -24,8 +26,21 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
-        $request->authenticate();
+        $credentials = $request->only('email', 'password');
 
+        // 1. D'ABORD, on vérifie si c'est un Super Admin
+        $superAdmin = SuperAdmin::where('email', $request->email)->first();
+
+        if ($superAdmin && Hash::check($request->password, $superAdmin->password)) {
+            // C'est un Super Admin, on stocke temporairement son ID et on redirige vers la vérification du code
+            $request->session()->put('pending_superadmin_id', $superAdmin->id);
+            $request->session()->regenerate();
+
+            return redirect()->route('superadmin.verify');
+        }
+
+        // 2. Sinon, on tente la connexion utilisateur normale
+        $request->authenticate();
         $request->session()->regenerate();
 
         return redirect()->intended(route('dashboard', absolute: false));
@@ -37,9 +52,9 @@ class AuthenticatedSessionController extends Controller
     public function destroy(Request $request): RedirectResponse
     {
         Auth::guard('web')->logout();
+        Auth::guard('superadmin')->logout();
 
         $request->session()->invalidate();
-
         $request->session()->regenerateToken();
 
         return redirect('/');

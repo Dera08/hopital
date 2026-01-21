@@ -94,7 +94,7 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                                     </a>
 
-                                    @if(auth()->user()->role === 'doctor' || auth()->user()->role === 'admin' || auth()->user()->role === 'internal_doctor')
+                                    @if(auth()->user()?->role === 'doctor' || auth()->user()?->role === 'admin' || auth()->user()?->role === 'internal_doctor')
                                     <form action="{{ route('medical-records.destroy', $record->id) }}" method="POST" class="inline"
                                           onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce dossier médical ? Cette action est irréversible.')">
                                         @csrf

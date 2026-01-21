@@ -67,6 +67,10 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
     $inactiveUsers = User::where('hospital_id', $hospitalId)->where('is_active', false)->with('service')->get();
     $recentActivities = $this->getRecentActivities($hospitalId);
 
+    // Add invoices stats for admin dashboard
+    $invoiceStats = $this->getInvoiceStatsForDashboard($hospitalId);
+    $stats = array_merge($stats, $invoiceStats);
+
     return view('admin.dashboard', array_merge($stats, compact('todayAppointments', 'inactiveUsers', 'recentActivities')));
 }
     // --- 2. LOGIQUE POUR L'INFIRMIER ---
@@ -331,90 +335,196 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
 
     private function getRecentActivities($hospitalId)
     {
-        $activities = collect();
+        try {
+            $activities = collect();
 
-        // Recent admissions
-        $recentAdmissions = Admission::with(['patient', 'room', 'doctor'])
-            ->where('hospital_id', $hospitalId)
-            ->latest('admission_date')
-            ->take(3)
+            // Recent admissions
+            $recentAdmissions = Admission::with(['patient', 'room', 'doctor'])
+                ->where('hospital_id', $hospitalId)
+                ->whereHas('patient')
+                ->latest('admission_date')
+                ->take(3)
+                ->get()
+                ->map(function ($admission) {
+                    return [
+                        'type' => 'admission',
+                        'user' => optional($admission->doctor)->name ?? 'Admin Système',
+                        'message' => "Patient " . (optional($admission->patient)->name ?? 'Inconnu') . " admis en " . (optional($admission->room)->service ? optional($admission->room)->service->name : 'service') . " - Chambre " . (optional($admission->room)->room_number ?? 'N/A'),
+                        'time' => $admission->admission_date,
+                        'icon' => 'fas fa-user-plus',
+                        'color' => 'success'
+                    ];
+                });
+
+            // Recent appointments
+            $recentAppointments = Appointment::with(['patient', 'doctor'])
+                ->where('hospital_id', $hospitalId)
+                ->whereHas('patient')
+                ->whereHas('doctor')
+                ->where('status', 'completed')
+                ->latest('appointment_datetime')
+                ->take(3)
+                ->get()
+                ->map(function ($appointment) {
+                    return [
+                        'type' => 'appointment',
+                        'user' => optional($appointment->doctor)->name ?? 'Médecin',
+                        'message' => "Rendez-vous terminé avec " . (optional($appointment->patient)->name ?? 'Patient'),
+                        'time' => $appointment->appointment_datetime,
+                        'icon' => 'fas fa-calendar-check',
+                        'color' => 'primary'
+                    ];
+                });
+
+            // Recent clinical observations
+            $recentObservations = \App\Models\ClinicalObservation::with(['patient', 'user'])
+                ->where('hospital_id', $hospitalId)
+                ->whereHas('patient')
+                ->whereHas('user')
+                ->latest('created_at')
+                ->take(3)
+                ->get()
+                ->map(function ($observation) {
+                    return [
+                        'type' => 'observation',
+                        'user' => optional($observation->user)->name ?? 'Personnel médical',
+                        'message' => "Observation clinique ajoutée pour " . (optional($observation->patient)->name ?? 'Patient') . " - " . ($observation->type ?? 'Type inconnu'),
+                        'time' => $observation->created_at,
+                        'icon' => 'fas fa-stethoscope',
+                        'color' => 'info'
+                    ];
+                });
+
+            // Recent medical records
+            $recentRecords = \App\Models\MedicalRecord::with(['patient', 'recordedBy'])
+                ->where('hospital_id', $hospitalId)
+                ->whereHas('patient')
+                ->whereHas('recordedBy')
+                ->latest('created_at')
+                ->take(3)
+                ->get()
+                ->map(function ($record) {
+                    return [
+                        'type' => 'record',
+                        'user' => optional($record->recordedBy)->name ?? 'Médecin',
+                        'message' => "Dossier médical mis à jour pour " . (optional($record->patient)->name ?? 'Patient'),
+                        'time' => $record->created_at,
+                        'icon' => 'fas fa-file-medical',
+                        'color' => 'warning'
+                    ];
+                });
+
+            // Combine all activities and sort by time
+            $activities = $recentAdmissions
+                ->concat($recentAppointments)
+                ->concat($recentObservations)
+                ->concat($recentRecords)
+                ->sortByDesc('time')
+                ->take(10)
+                ->map(function ($activity) {
+                    $activity['time_ago'] = Carbon::parse($activity['time'])->diffForHumans();
+                    return $activity;
+                });
+
+            return $activities;
+        } catch (\Exception $e) {
+            // Log the error and return empty collection to prevent dashboard crash
+            \Log::error('Error in getRecentActivities: ' . $e->getMessage());
+            return collect();
+        }
+    }
+
+    private function getInvoiceStatsForDashboard($hospitalId)
+    {
+        // Get invoice statistics for the hospital
+        $invoices = \App\Models\Invoice::where('hospital_id', $hospitalId)->get();
+
+        $totalRevenue = $invoices->sum('total_amount');
+        $totalPaid = $invoices->sum(function ($invoice) {
+            return $invoice->payments->sum('amount');
+        });
+        $totalPending = $totalRevenue - $totalPaid;
+        $paidInvoices = $invoices->filter(function ($invoice) {
+            $paidAmount = $invoice->payments->sum('amount');
+            return $paidAmount >= $invoice->total_amount;
+        })->count();
+        $pendingInvoices = $invoices->count() - $paidInvoices;
+
+        return [
+            'total_revenue' => $totalRevenue,
+            'total_paid' => $totalPaid,
+            'total_pending' => $totalPending,
+            'paid_invoices' => $paidInvoices,
+            'pending_invoices' => $pendingInvoices,
+            'total_invoices' => $invoices->count(),
+        ];
+    }
+
+
+
+    public function getInvoiceStatsApi()
+    {
+        $user = auth()->user();
+        if (!$user->isAdmin()) {
+            abort(403, 'Accès non autorisé');
+        }
+
+        $hospitalId = $user->hospital_id;
+
+        // Get invoice statistics for the hospital
+        $invoices = \App\Models\Invoice::where('hospital_id', $hospitalId)->get();
+
+        $totalRevenue = $invoices->sum('total_amount');
+        $totalPaid = $invoices->sum(function ($invoice) {
+            return $invoice->payments->sum('amount');
+        });
+        $totalPending = $totalRevenue - $totalPaid;
+        $paidInvoices = $invoices->filter(function ($invoice) {
+            $paidAmount = $invoice->payments->sum('amount');
+            return $paidAmount >= $invoice->total_amount;
+        })->count();
+        $pendingInvoices = $invoices->count() - $paidInvoices;
+
+        return response()->json([
+            'total_revenue' => $totalRevenue,
+            'total_paid' => $totalPaid,
+            'total_pending' => $totalPending,
+            'paid_invoices' => $paidInvoices,
+            'pending_invoices' => $pendingInvoices,
+            'total_invoices' => $invoices->count(),
+        ]);
+    }
+
+    public function getInvoices()
+    {
+        $user = auth()->user();
+        if (!$user->isAdmin()) {
+            abort(403, 'Accès non autorisé');
+        }
+
+        // Get all invoices for this hospital
+        $invoices = \App\Models\Invoice::with(['patient', 'payments'])
+            ->where('hospital_id', $user->hospital_id)
+            ->orderBy('created_at', 'desc')
             ->get()
-            ->map(function ($admission) {
+            ->map(function ($invoice) {
+                $totalPaid = $invoice->payments->sum('amount');
+                $remainingAmount = $invoice->total_amount - $totalPaid;
+
                 return [
-                    'type' => 'admission',
-                    'user' => isset($admission->doctor->name) ? $admission->doctor->name : 'Admin Système',
-                    'message' => "Patient {$admission->patient->name} admis en " . (isset($admission->room->service->name) ? $admission->room->service->name : 'service') . " - Chambre " . (isset($admission->room->room_number) ? $admission->room->room_number : 'N/A'),
-                    'time' => $admission->admission_date,
-                    'icon' => 'fas fa-user-plus',
-                    'color' => 'success'
+                    'id' => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'patient_name' => $invoice->patient ? $invoice->patient->name : 'Patient inconnu',
+                    'total_amount' => $invoice->total_amount,
+                    'paid_amount' => $totalPaid,
+                    'remaining_amount' => $remainingAmount,
+                    'status' => $remainingAmount <= 0 ? 'PAYÉ' : ($totalPaid > 0 ? 'PARTIELLEMENT PAYÉ' : 'IMPAYÉ'),
+                    'created_at' => $invoice->created_at->format('d/m/Y'),
+                    'due_date' => $invoice->due_date ? $invoice->due_date->format('d/m/Y') : null,
                 ];
             });
 
-        // Recent appointments
-        $recentAppointments = Appointment::with(['patient', 'doctor'])
-            ->where('hospital_id', $hospitalId)
-            ->where('status', 'completed')
-            ->latest('appointment_datetime')
-            ->take(3)
-            ->get()
-            ->map(function ($appointment) {
-                return [
-                    'type' => 'appointment',
-                    'user' => $appointment->doctor->name ?? 'Médecin',
-                    'message' => "Rendez-vous terminé avec {$appointment->patient->name}",
-                    'time' => $appointment->appointment_datetime,
-                    'icon' => 'fas fa-calendar-check',
-                    'color' => 'primary'
-                ];
-            });
-
-        // Recent clinical observations
-        $recentObservations = \App\Models\ClinicalObservation::with(['patient', 'user'])
-            ->where('hospital_id', $hospitalId)
-            ->latest('created_at')
-            ->take(3)
-            ->get()
-            ->map(function ($observation) {
-                return [
-                    'type' => 'observation',
-                    'user' => $observation->user->name ?? 'Personnel médical',
-                    'message' => "Observation clinique ajoutée pour {$observation->patient->name} - {$observation->type}",
-                    'time' => $observation->created_at,
-                    'icon' => 'fas fa-stethoscope',
-                    'color' => 'info'
-                ];
-            });
-
-        // Recent medical records
-        $recentRecords = \App\Models\MedicalRecord::with(['patient', 'recordedBy'])
-            ->where('hospital_id', $hospitalId)
-            ->latest('created_at')
-            ->take(3)
-            ->get()
-            ->map(function ($record) {
-                return [
-                    'type' => 'record',
-                    'user' => $record->recordedBy->name ?? 'Médecin',
-                    'message' => "Dossier médical mis à jour pour {$record->patient->name}",
-                    'time' => $record->created_at,
-                    'icon' => 'fas fa-file-medical',
-                    'color' => 'warning'
-                ];
-            });
-
-        // Combine all activities and sort by time
-        $activities = $recentAdmissions
-            ->concat($recentAppointments)
-            ->concat($recentObservations)
-            ->concat($recentRecords)
-            ->sortByDesc('time')
-            ->take(10)
-            ->map(function ($activity) {
-                $activity['time_ago'] = Carbon::parse($activity['time'])->diffForHumans();
-                return $activity;
-            });
-
-        return $activities;
+        return response()->json(['invoices' => $invoices]);
     }
 
     public function settings()
@@ -422,5 +532,54 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
         $user = auth()->user();
 
         return view('settings', compact('user'));
+    }
+
+    public function manageSubscription()
+    {
+        $user = auth()->user();
+        // Refresh the hospital relationship to get updated subscription data
+        $user->load('hospital.subscriptionPlan');
+        $hospital = $user->hospital;
+        $currentPlan = $hospital->subscriptionPlan;
+        $availablePlans = \App\Models\SubscriptionPlan::where('is_active', true)->get();
+
+        return view('admin.subscription.manage', compact('user', 'hospital', 'currentPlan', 'availablePlans'));
+    }
+
+    public function changeSubscription(Request $request)
+    {
+        $request->validate([
+            'plan_id' => 'required|exists:subscription_plans,id'
+        ]);
+
+        $user = auth()->user();
+        $hospital = $user->hospital;
+        $newPlan = \App\Models\SubscriptionPlan::find($request->plan_id);
+
+        // Only process payment for paid plans
+        if ($newPlan->price > 0) {
+            // Log the subscription payment as SaaS revenue for Super Admin dashboard
+            \App\Models\TransactionLog::create([
+                'source_type' => 'hospital',
+                'source_id' => $hospital->id,
+                'amount' => $newPlan->price,
+                'fee_applied' => 0, // No fee applied for subscription payments
+                'net_income' => $newPlan->price,
+                'description' => "Paiement abonnement - {$newPlan->name} - {$newPlan->price} ₣"
+            ]);
+        }
+
+        $hospital->update([
+            'subscription_plan_id' => $request->plan_id
+        ]);
+
+        // Log de l'action
+        \App\Models\AuditLog::log('subscription_changed', 'Hospital', $hospital->id, [
+            'description' => 'Changement de plan d\'abonnement',
+            'old_plan' => $hospital->subscriptionPlan->name ?? 'Aucun',
+            'new_plan' => $newPlan->name
+        ]);
+
+        return redirect()->back()->with('success', 'Plan d\'abonnement mis à jour avec succès.');
     }
 }

@@ -5,7 +5,7 @@ use App\Http\Controllers\{
     AdmissionController, PrescriptionController, MedicalRecordController,
     UserController, RoomController, InvoiceController, PortalController,
     ReportController, ObservationController, NurseController, ServiceController,
-    HospitalController, PrestationController, CashierController
+    HospitalController, PrestationController, CashierController, ProfileController
 };
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Patient\PatientPortalController;
@@ -13,6 +13,7 @@ use App\Http\Controllers\Auth\PatientAuthController;
 use App\Http\Controllers\Medecin\MedecinDashboardController;
 use App\Http\Controllers\Medecin\ExternalDoctorController;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\SuperAdmin\SubscriptionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -95,10 +96,11 @@ Route::post('/logout', function (\Illuminate\Http\Request $request) {
 Route::prefix('portal')->name('patient.')->group(function () {
     Route::middleware('guest:patients')->group(function () {
         Route::get('/login', [PatientAuthController::class, 'showLoginForm'])->name('login');
-        Route::post('/login', [PatientAuthController::class, 'login'])->name('login.submit'); // ✅ Ajout du nom
+        Route::post('/login', [PatientAuthController::class, 'login'])->name('login.submit');
         Route::get('/register', [PatientAuthController::class, 'showRegistrationForm'])->name('register');
-        Route::post('/register', [PatientAuthController::class, 'register'])->name('register.submit'); // ✅ Ajout du nom
+        Route::post('/register', [PatientAuthController::class, 'register'])->name('register.submit');
     });
+    
     Route::middleware('auth:patients')->group(function () {
         Route::get('/dashboard', [PatientPortalController::class, 'dashboard'])->name('dashboard');
         Route::get('/profile', [PatientPortalController::class, 'profile'])->name('profile');
@@ -106,6 +108,10 @@ Route::prefix('portal')->name('patient.')->group(function () {
         Route::get('/appointments', [PatientPortalController::class, 'appointments'])->name('appointments');
         Route::get('/book-appointment', [PatientPortalController::class, 'bookAppointment'])->name('book-appointment');
         Route::post('/book-appointment', [PatientPortalController::class, 'storeAppointment'])->name('book-appointment.store');
+        
+        // Route AJAX pour récupérer les services d'un hôpital
+        Route::get('/hospitals/{hospital}/services', [PatientPortalController::class, 'getHospitalServices'])->name('hospitals.services');
+        
         Route::get('/documents', [PatientPortalController::class, 'documents'])->name('documents');
         Route::get('/medical-history', [PatientPortalController::class, 'medicalHistory'])->name('medical-history');
         Route::get('/prescriptions', [PatientPortalController::class, 'prescriptions'])->name('prescriptions');
@@ -113,6 +119,7 @@ Route::prefix('portal')->name('patient.')->group(function () {
         Route::get('/health-metrics', [PatientPortalController::class, 'healthMetrics'])->name('health-metrics');
         Route::get('/emergency-contacts', [PatientPortalController::class, 'emergencyContacts'])->name('emergency-contacts');
         Route::get('/messaging', [PatientPortalController::class, 'messaging'])->name('messaging');
+        
         Route::post('/logout', function (\Illuminate\Http\Request $request) {
             Auth::guard('patients')->logout();
             $request->session()->invalidate();
@@ -122,11 +129,14 @@ Route::prefix('portal')->name('patient.')->group(function () {
     });
 });
 
+ 
 // ========== ROUTES STAFF (Admin, Réception, etc.) ==========
 Route::middleware(['auth', 'active_user'])->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/stats', [DashboardController::class, 'stats'])->name('dashboard.stats');
+    Route::get('/dashboard/invoices/stats', [DashboardController::class, 'getInvoiceStatsApi'])->name('dashboard.invoices.stats');
+    Route::get('/dashboard/invoices/data', [DashboardController::class, 'getInvoices'])->name('dashboard.invoices.data');
 
     // Support & Aide
     Route::get('/help', function () {
@@ -240,7 +250,9 @@ Route::middleware(['auth', 'active_user'])->group(function () {
     });
 
     // Profil & Paramètres
-    Route::get('/profile', fn() => view('profile.edit', ['user' => auth()->user()]))->name('profile.edit');
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::get('/settings', fn() => view('settings.index'))->name('settings');
 
 
@@ -264,11 +276,30 @@ Route::middleware(['auth', 'active_user'])->group(function () {
         });
     });
 
+    Route::middleware(['auth', 'active_user', 'role:admin'])->group(function () {
+        Route::get('/subscription/manage', [DashboardController::class, 'manageSubscription'])->name('admin.subscription.manage');
+        Route::post('/subscription/change', [DashboardController::class, 'changeSubscription'])->name('admin.subscription.change');
+    });
+
+    // Publicly accessible checkout and pay routes for hospitals and specialists (authenticated)
+    Route::get('/subscription/{plan}/checkout', [SubscriptionController::class, 'checkout'])
+        ->name('subscription.checkout')
+        ->middleware('auth');
+
+    Route::post('/subscription/{plan}/pay', [SubscriptionController::class, 'initiatePayment'])
+        ->name('subscription.pay')
+        ->middleware('auth');
+
+    // Webhook (public) for CinetPay - used by ngrok during testing
+    Route::post('/payment/cinetpay/webhook', [SubscriptionController::class, 'handleCinetpayWebhook'])
+        ->name('cinetpay.webhook');
+
 }); // FIN DU MIDDLEWARE AUTH PRINCIPAL
 
 // ROUTES PUBLIQUES
 Route::get('/health', fn() => response()->json(['status' => 'ok']))->name('health.check');
 
 require __DIR__.'/nurse.php';
+require __DIR__.'/superadmin.php';
 
 Route::fallback(fn() => response()->view('errors.404', [], 404));

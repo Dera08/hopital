@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Hash, Password};
+use App\Http\Controllers\MFAController;
 
 /*
 |--------------------------------------------------------------------------
@@ -157,40 +158,9 @@ Route::middleware('auth')->group(function () {
         ]);
     })->name('mfa.verify.post');
 
-    Route::get('mfa/setup', function () {
-        return view('auth.mfa-setup');
-    })->name('mfa.setup');
+    Route::get('mfa/setup', [MFAController::class, 'setup'])->name('mfa.setup');
 
-    Route::post('mfa/setup', function (Request $request) {
-        $user = auth()->user();
+    Route::post('mfa/setup', [MFAController::class, 'enable'])->name('mfa.setup.post');
 
-        // Génération du secret MFA (utiliser Google2FA en production)
-        $secret = \Illuminate\Support\Str::random(32);
-
-        $user->update([
-            'mfa_enabled' => true,
-            'mfa_secret' => encrypt($secret),
-        ]);
-
-        \App\Models\AuditLog::log('mfa_enabled', 'User', $user->id, [
-            'description' => 'Activation de l\'authentification MFA',
-        ]);
-
-        return redirect()->route('settings')->with('success', 'MFA activé avec succès.');
-    })->name('mfa.setup.post');
-
-    Route::post('mfa/disable', function (Request $request) {
-        $user = auth()->user();
-
-        $user->update([
-            'mfa_enabled' => false,
-            'mfa_secret' => null,
-        ]);
-
-        \App\Models\AuditLog::log('mfa_disabled', 'User', $user->id, [
-            'description' => 'Désactivation de l\'authentification MFA',
-        ]);
-
-        return redirect()->route('settings')->with('success', 'MFA désactivé avec succès.');
-    })->name('mfa.disable');
+    Route::post('mfa/disable', [MFAController::class, 'disable'])->name('mfa.disable');
 });

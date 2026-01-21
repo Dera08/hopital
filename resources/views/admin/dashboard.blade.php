@@ -31,6 +31,9 @@
                 <a href="#" id="activation-tab-btn" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm" data-tab="activation">
                     Activation de Comptes
                 </a>
+                <a href="#" id="invoices-tab-btn" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm" data-tab="invoices">
+                    Factures & Revenus
+                </a>
             </nav>
         </div>
     </div>
@@ -317,6 +320,47 @@
             @endif
         </div>
     </div>
+
+    <!-- Contenu de l'onglet Factures & Revenus -->
+    <div id="invoices-tab" class="tab-content hidden">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 text-left gap-4">
+            <div>
+                <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Factures & Revenus de l'Hôpital</h2>
+                <p class="text-slate-500 font-medium">Suivez tous les revenus et paiements de votre hôpital.</p>
+            </div>
+            <button onclick="refreshInvoicesData()" class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-3xl font-bold transition shadow-xl shadow-green-200 flex items-center justify-center gap-3">
+                <i class="bi bi-arrow-clockwise"></i>
+                Actualiser
+            </button>
+        </div>
+
+        <!-- Revenue Statistics -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 text-left" id="invoiceStats">
+            <!-- Stats will be loaded here -->
+        </div>
+
+        <!-- Invoices Table -->
+        <div class="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden text-left">
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50/50 text-slate-400 text-[11px] font-black uppercase tracking-widest border-b border-slate-100">
+                            <th class="px-8 py-6">Facture</th>
+                            <th class="px-8 py-6">Patient</th>
+                            <th class="px-8 py-6 text-right">Montant Total</th>
+                            <th class="px-8 py-6 text-right">Payé</th>
+                            <th class="px-8 py-6 text-right">Restant</th>
+                            <th class="px-8 py-6 text-center">Statut</th>
+                            <th class="px-8 py-6">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoicesTable">
+                        <!-- Invoices will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -345,8 +389,177 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show corresponding content
             const tabId = this.getAttribute('data-tab') + '-tab';
             document.getElementById(tabId).classList.remove('hidden');
+
+            // Load data for invoices tab
+            if (tabId === 'invoices-tab') {
+                refreshInvoicesData();
+            }
         });
     });
 });
+
+// === INVOICES MANAGEMENT ===
+function refreshInvoicesData() {
+    loadInvoiceStats();
+    loadInvoicesTable();
+}
+
+function loadInvoiceStats() {
+    fetch('/dashboard/invoices/stats', {
+        method: 'GET',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        const statsContainer = document.getElementById('invoiceStats');
+        statsContainer.innerHTML = '';
+
+        const stats = [
+            { label: 'Revenus Totaux', value: data.total_revenue, icon: 'bi-cash-stack', color: 'green' },
+            { label: 'Montant Payé', value: data.total_paid, icon: 'bi-check-circle', color: 'blue' },
+            { label: 'Montant Restant', value: data.total_pending, icon: 'bi-clock-history', color: 'orange' },
+            { label: 'Factures Payées', value: data.paid_invoices, icon: 'bi-receipt', color: 'purple' }
+        ];
+
+        stats.forEach(stat => {
+            const statDiv = document.createElement('div');
+            statDiv.className = `card-stat bg-white rounded-3xl p-6 border border-slate-200/60 shadow-sm`;
+            statDiv.innerHTML = `
+                <div class="flex items-center justify-between mb-4">
+                    <div class="bg-${stat.color}-50 p-3 rounded-2xl text-${stat.color}-600">
+                        <i class="bi ${stat.icon} text-xl"></i>
+                    </div>
+                </div>
+                <div class="text-4xl font-black text-slate-900 tracking-tighter">${stat.value.toLocaleString()}</div>
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">${stat.label}</div>
+            `;
+            statsContainer.appendChild(statDiv);
+        });
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Erreur lors du chargement des statistiques', 'error');
+    });
+}
+
+function loadInvoicesTable() {
+    fetch('/dashboard/invoices/data', {
+        method: 'GET',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        const tableBody = document.getElementById('invoicesTable');
+        tableBody.innerHTML = '';
+
+        if (data.invoices && data.invoices.length > 0) {
+            data.invoices.forEach(invoice => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-blue-50/30 transition-colors';
+
+                let statusClass = 'bg-gray-100 text-gray-800';
+                if (invoice.status === 'PAYÉ') {
+                    statusClass = 'bg-green-100 text-green-800';
+                } else if (invoice.status === 'PARTIELLEMENT PAYÉ') {
+                    statusClass = 'bg-yellow-100 text-yellow-800';
+                } else {
+                    statusClass = 'bg-red-100 text-red-800';
+                }
+
+                row.innerHTML = `
+                    <td class="px-8 py-6">
+                        <div class="font-bold text-slate-900">${invoice.invoice_number}</div>
+                    </td>
+                    <td class="px-8 py-6">
+                        <div class="text-slate-600">${invoice.patient_name}</div>
+                    </td>
+                    <td class="px-8 py-6 text-right">
+                        <div class="font-bold text-slate-900">${invoice.total_amount.toLocaleString()} FCFA</div>
+                    </td>
+                    <td class="px-8 py-6 text-right">
+                        <div class="font-medium text-green-600">${invoice.paid_amount.toLocaleString()} FCFA</div>
+                    </td>
+                    <td class="px-8 py-6 text-right">
+                        <div class="font-medium text-orange-600">${invoice.remaining_amount.toLocaleString()} FCFA</div>
+                    </td>
+                    <td class="px-8 py-6 text-center">
+                        <span class="px-3 py-1 rounded-full text-xs font-bold ${statusClass}">
+                            ${invoice.status}
+                        </span>
+                    </td>
+                    <td class="px-8 py-6">
+                        <div class="text-sm text-slate-500">${invoice.created_at}</div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="7" class="px-8 py-12 text-center text-slate-400">Aucune facture trouvée</td></tr>';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Erreur lors du chargement des factures', 'error');
+    });
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-2xl shadow-xl transform transition-all duration-300 translate-x-full`;
+
+    let bgColor, textColor, icon;
+    switch(type) {
+        case 'success':
+            bgColor = 'bg-green-500';
+            textColor = 'text-white';
+            icon = 'bi-check-circle-fill';
+            break;
+        case 'error':
+            bgColor = 'bg-red-500';
+            textColor = 'text-white';
+            icon = 'bi-exclamation-triangle-fill';
+            break;
+        case 'warning':
+            bgColor = 'bg-yellow-500';
+            textColor = 'text-white';
+            icon = 'bi-exclamation-circle-fill';
+            break;
+        default:
+            bgColor = 'bg-blue-500';
+            textColor = 'text-white';
+            icon = 'bi-info-circle-fill';
+    }
+
+    notification.classList.add(bgColor, textColor);
+    notification.innerHTML = `
+        <div class="flex items-center gap-3">
+            <i class="bi ${icon} text-xl"></i>
+            <span class="font-bold">${message}</span>
+        </div>
+    `;
+
+    document.body.appendChild(notification);
+
+    // Animate in
+    setTimeout(() => {
+        notification.classList.remove('translate-x-full');
+    }, 100);
+
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
+}
 </script>
 @endsection

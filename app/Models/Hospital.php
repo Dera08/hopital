@@ -10,7 +10,7 @@ class Hospital extends Model
 {
     use HasFactory;
     // On autorise le remplissage de ces colonnes
-    protected $fillable = ['name', 'slug', 'address', 'logo', 'is_active'];
+    protected $fillable = ['name', 'slug', 'address', 'logo', 'is_active', 'subscription_plan_id'];
 
     // Un hôpital a plusieurs services
     public function services(): HasMany
@@ -22,5 +22,23 @@ class Hospital extends Model
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
+    }
+
+    // Un hôpital a plusieurs patients
+    public function patients(): HasMany
+    {
+        return $this->hasMany(Patient::class);
+    }
+
+    // Un hôpital a plusieurs prestations
+    public function prestations(): HasMany
+    {
+        return $this->hasMany(Prestation::class);
+    }
+
+    // Un hôpital appartient à un plan d'abonnement
+    public function subscriptionPlan()
+    {
+        return $this->belongsTo(SubscriptionPlan::class);
     }
 }

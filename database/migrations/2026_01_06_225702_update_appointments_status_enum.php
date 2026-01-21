@@ -12,6 +12,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Skip for SQLite as it doesn't support MODIFY COLUMN with ENUM
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE appointments MODIFY COLUMN status ENUM('scheduled', 'confirmed', 'cancelled', 'completed', 'prepared', 'pending_payment', 'paid', 'released') DEFAULT 'scheduled'");
     }
 
@@ -20,6 +25,11 @@ return new class extends Migration
      */
     public function down(): void
     {
+        // Skip for SQLite as it doesn't support MODIFY COLUMN with ENUM
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE appointments MODIFY COLUMN status ENUM('scheduled', 'confirmed', 'cancelled', 'completed', 'prepared') DEFAULT 'scheduled'");
     }
 };

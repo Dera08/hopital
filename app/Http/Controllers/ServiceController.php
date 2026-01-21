@@ -25,14 +25,12 @@ class ServiceController extends Controller
             'name' => 'required|string|max:255',
             'code' => 'required|string|max:10|unique:services,code',
             'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
         ]);
 
         Service::create([
             'name' => $request->name,
             'code' => $request->code,
             'description' => $request->description,
-            'price' => $request->price,
             'hospital_id' => Auth::user()->hospital_id,
             'is_active' => true,
         ]);

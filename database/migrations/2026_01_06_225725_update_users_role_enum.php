@@ -12,6 +12,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Skip for SQLite as it doesn't support MODIFY COLUMN with ENUM
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'doctor', 'nurse', 'administrative', 'cashier', 'internal_doctor', 'external_doctor') DEFAULT 'administrative'");
     }
 
@@ -20,6 +25,11 @@ return new class extends Migration
      */
     public function down(): void
     {
+        // Skip for SQLite as it doesn't support MODIFY COLUMN with ENUM
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'doctor', 'nurse', 'administrative', 'internal_doctor', 'external_doctor') DEFAULT 'administrative'");
     }
 };

@@ -19,7 +19,7 @@ class NurseController extends Controller
         $user = auth()->user();
 
         // 1. On récupère les RDV (Seulement si FACTURE PAYÉE)
-        $appointments = Appointment::with(['patient', 'invoices'])
+        $appointments = Appointment::with(['patient', 'doctor', 'invoices'])
             ->where('hospital_id', $user->hospital_id)
             ->where('service_id', $user->service_id)
             ->where('status', 'paid')

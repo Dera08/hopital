@@ -17,6 +17,12 @@ return [
             'driver' => 'session',
             'provider' => 'patients',
         ],
+
+        // AJOUT DU SUPERADMIN
+        'superadmin' => [
+            'driver' => 'session',
+            'provider' => 'super_admins',
+        ],
     ],
 
     'providers' => [
@@ -26,8 +32,14 @@ return [
         ],
 
         'patients' => [
-            'driver' => 'eloquent', // ✅ DOIT être 'eloquent' (pas 'patient')
+            'driver' => 'eloquent',
             'model' => App\Models\Patient::class,
+        ],
+
+        // AJOUT DU PROVIDER POUR LE MODÈLE SUPERADMIN
+        'super_admins' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\SuperAdmin::class,
         ],
     ],
 
@@ -41,6 +53,14 @@ return [
 
         'patients' => [
             'provider' => 'patients',
+            'table' => 'password_reset_tokens',
+            'expire' => 60,
+            'throttle' => 60,
+        ],
+        
+        // OPTIONNEL : Reset password pour superadmin
+        'super_admins' => [
+            'provider' => 'super_admins',
             'table' => 'password_reset_tokens',
             'expire' => 60,
             'throttle' => 60,

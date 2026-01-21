@@ -15,11 +15,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'patient' => \App\Http\Middleware\PatientMiddleware::class,
             'role' => \App\Http\Middleware\CheckRole::class,
+            'superadmin.verified' => \App\Http\Middleware\EnsureSuperAdminVerified::class,
         ]);
 
-        // Exclure la route d'inscription du CSRF pour les tests
+        // Exclure certaines routes du CSRF pour les tests et AJAX
         $middleware->validateCsrfTokens(except: [
             'register/*',
+            'admin-system/*',
+            'payment/cinetpay/webhook',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

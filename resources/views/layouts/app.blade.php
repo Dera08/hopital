@@ -172,7 +172,7 @@
 
             <nav class="flex-1 px-3 py-6 space-y-1 overflow-y-auto custom-scrollbar">
             @auth
-                @if(auth()->user() && auth()->user()->role === 'doctor')
+                @if(auth()->user()?->role === 'doctor')
                     <div class="pb-4">
                         <p x-show="sidebarOpen" class="px-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Menu Principal</p>
                     </div>

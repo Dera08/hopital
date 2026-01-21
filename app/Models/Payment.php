@@ -1,3 +1,21 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Payment extends Model
+{
+    protected $fillable = [
+        'transaction_ref', 'amount', 'currency', 'buyer_type', 'buyer_id', 'plan_id', 'status', 'metadata', 'response'
+    ];
+
+    protected $casts = [
+        'amount' => 'decimal:2',
+        'metadata' => 'array',
+        'response' => 'array',
+    ];
+}
 // app/Models/Payment.php
 namespace App\Models;
 

@@ -11,26 +11,6 @@
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center p-4">
     
     <div class="max-w-md w-full">
-        <!-- Logo block hidden as requested -->
-        <!--
-        <div class="text-center mb-8">
-            @if(isset($hospital) && $hospital->logo)
-                <div class="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl mb-4 shadow-lg">
-                    <img src="{{ asset($hospital->logo) }}" alt="{{ $hospital->name }} Logo" class="w-16 h-16 object-contain">
-                </div>
-                <h1 class="text-3xl font-bold text-gray-900">{{ $hospital->name }}</h1>
-                <p class="text-gray-600 mt-2">{{ $hospital->address }}</p>
-            @else
-                <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
-                    <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                    </svg>
-                </div>
-                <h1 class="text-3xl font-bold text-gray-900">HospitSIS</h1>
-                <p class="text-gray-600 mt-2">Système d'Information de Santé</p>
-            @endif
-        </div>
-        -->
 
         <div class="bg-white rounded-2xl shadow-xl p-8">
             <h2 class="text-2xl font-semibold text-gray-900 mb-6">Connexion</h2>
@@ -51,6 +31,7 @@
             <form method="POST" action="{{ route('login.process') }}">
                 @csrf
 
+                {{-- Email ou IPU --}}
                 <div class="mb-4">
                     <label for="identifier" class="block text-sm font-medium text-gray-700 mb-2">
                         Adresse email ou IPU
@@ -60,6 +41,7 @@
                         placeholder="votre@email.ci ou IPU">
                 </div>
 
+                {{-- Mot de passe --}}
                 <div class="mb-6">
                     <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
                         Mot de passe
@@ -71,6 +53,21 @@
                         <button type="button" class="absolute inset-y-0 right-0 pr-3 flex items-center" id="toggle-password">
                             <i class="fas fa-eye text-gray-400 hover:text-gray-600"></i>
                         </button>
+                    </div>
+                </div>
+
+                {{-- Champ SECRET pour le Super Admin --}}
+                <div id="super-admin-field" class="mb-6 hidden">
+                    <label for="access_code" class="block text-sm font-medium text-gray-700 mb-2 text-red-600 font-bold">
+                        Code d'accès sécurisé
+                    </label>
+                    <div class="relative">
+                        <input type="password" name="access_code" id="access_code" 
+                            class="w-full px-4 py-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition bg-red-50"
+                            placeholder="Entrez votre code secret">
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <i class="fas fa-shield-alt text-red-400"></i>
+                        </div>
                     </div>
                 </div>
 
@@ -91,8 +88,6 @@
                     Se connecter
                 </button>
             </form>
-
-
         </div>
 
         <p class="text-center text-sm text-gray-600 mt-8">
@@ -102,17 +97,15 @@
     </div>
 
     <script>
-        // Password visibility toggle
         document.addEventListener('DOMContentLoaded', function() {
+            // 1. Gestion de l'affichage du mot de passe
             const toggleButton = document.getElementById('toggle-password');
             const passwordInput = document.getElementById('password');
 
             if (toggleButton && passwordInput) {
                 toggleButton.addEventListener('click', function(e) {
                     e.preventDefault();
-
                     const icon = this.querySelector('i');
-
                     if (passwordInput.type === 'password') {
                         passwordInput.type = 'text';
                         icon.classList.remove('fa-eye');
@@ -121,6 +114,27 @@
                         passwordInput.type = 'password';
                         icon.classList.remove('fa-eye-slash');
                         icon.classList.add('fa-eye');
+                    }
+                });
+            }
+
+            // 2. Détection dynamique de l'email Super Admin
+            const identifierInput = document.getElementById('identifier');
+            const superAdminField = document.getElementById('super-admin-field');
+            const accessCodeInput = document.getElementById('access_code');
+            
+            // On récupère l'email configuré dans le .env
+            const superAdminEmail = "{{ env('SUPER_ADMIN_EMAIL') }}";
+
+            if (identifierInput && superAdminField) {
+                identifierInput.addEventListener('input', function() {
+                    // Si on tape l'email du super admin, on montre le champ code
+                    if (this.value.trim() === superAdminEmail) {
+                        superAdminField.classList.remove('hidden');
+                        accessCodeInput.required = true;
+                    } else {
+                        superAdminField.classList.add('hidden');
+                        accessCodeInput.required = false;
                     }
                 });
             }

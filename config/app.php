@@ -107,6 +107,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Super Admin Access Code
+    |--------------------------------------------------------------------------
+    |
+    | This is the secret code required for super admin verification.
+    | Set this in your .env file as APP_SUPERADMIN_ACCESS_CODE.
+    |
+    */
+
+    'superadmin_access_code' => env('APP_SUPERADMIN_ACCESS_CODE', 'ADMIN2026'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Maintenance Mode Driver
     |--------------------------------------------------------------------------
     |

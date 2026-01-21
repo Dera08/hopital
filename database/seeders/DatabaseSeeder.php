@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\{Hash, DB};
 use App\Models\{Service, User, Patient, Room, Hospital, PatientVital};
+use Database\Seeders\SuperAdminSeeder;
 
 class DatabaseSeeder extends Seeder
 
@@ -13,7 +14,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
 {
     DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-    
+
     Hospital::truncate();
     Service::truncate();
     User::truncate();
@@ -21,8 +22,14 @@ class DatabaseSeeder extends Seeder
     Room::truncate();
     Appointment::truncate();
     PatientVital::truncate();
-    
+
     DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
+    // Seed Super Admin
+    $this->call(SuperAdminSeeder::class);
+
+    // Seed Subscription Plans
+    $this->call(SubscriptionPlanSeeder::class);
 
     // --- 1. CRÉATION DES HÔPITAUX ---
     $hospital1 = Hospital::create([
@@ -44,6 +51,17 @@ class DatabaseSeeder extends Seeder
 
     $this->seedAllData($hospital2->id, 'saintjean.ci', 'Saint-Jean');
     $this->command->info('✅ Données Hôpital 2 (Saint-Jean) terminées');
+
+    $hospital3 = Hospital::create([
+        'name' => 'Clinique Sarah',
+        'slug' => 'sarah-ci',
+        'address' => 'Abidjan, Yopougon',
+        'logo' => 'logos/sarah-logo.svg',
+        'is_active' => true,
+    ]);
+
+    $this->seedAllData($hospital3->id, 'sarah.ci', 'Sarah');
+    $this->command->info('✅ Données Hôpital 3 (Sarah) terminées');
 
     // --- 2. CRÉATION DU MÉDECIN (Cardiologie) ---
     $doctor = User::updateOrCreate(

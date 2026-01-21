@@ -14,16 +14,19 @@ trait BelongsToHospital
     {
         // 1. Filtrage automatique lors des requêtes (SELECT)
         // On vérifie si l'utilisateur est connecté et si un hospital_id est en session
-        if (auth()->check() || Session::has('hospital_id')) {
+        // Mais on exclut les superadmins qui doivent voir toutes les données
+        if ((auth()->check() && !auth()->guard('superadmin')->check()) || Session::has('hospital_id')) {
             static::addGlobalScope('hospital_filter', function (Builder $builder) {
                 $hospitalId = auth()->user()->hospital_id ?? Session::get('hospital_id');
-                $builder->where('hospital_id', $hospitalId);
+                if ($hospitalId) {
+                    $builder->where('hospital_id', $hospitalId);
+                }
             });
         }
 
         // 2. Assignation automatique lors de la création (INSERT)
         static::creating(function ($model) {
-            if (auth()->check() && !$model->hospital_id) {
+            if (auth()->check() && !auth()->guard('superadmin')->check() && !$model->hospital_id) {
                 $model->hospital_id = auth()->user()->hospital_id;
             }
         });

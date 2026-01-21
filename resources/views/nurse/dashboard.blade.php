@@ -19,7 +19,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold">HospitISIS</h1>
-                    <p class="text-pink-100 text-xs">{{ auth()->user()->role === 'nurse' ? 'Infirmière' : 'Infirmier' }} - {{ auth()->user()->name }}</p>
+                    <p class="text-pink-100 text-xs">{{ auth()->user()?->role === 'nurse' ? 'Infirmière' : 'Infirmier' }} - {{ auth()->user()?->name ?? 'User' }}</p>
                 </div>
             </div>
             <div class="flex items-center gap-3">
@@ -301,7 +301,7 @@ function nurseDashboard() {
                 date: '{{ $apt->appointment_datetime->format('d/m/Y') }}',
                 time: '{{ $apt->appointment_datetime->format('H:i') }}',
                 reason: '{{ $apt->reason }}',
-                doctor: '{{ $apt->doctor->name ?? "N/A" }}',
+                doctor: '{{ $apt->doctor ? $apt->doctor->name : "N/A" }}',
                 status: 'pending'
             },
             @endforeach

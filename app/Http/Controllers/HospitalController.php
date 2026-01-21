@@ -77,7 +77,7 @@ class HospitalController extends Controller
     }
 
     /**
-     * Traite la connexion générale (staff et patients)
+     * Traite la connexion générale (staff, patients et superadmin)
      */
     public function processGeneralLogin(Request $request)
     {
@@ -90,7 +90,20 @@ class HospitalController extends Controller
         $password = $request->password;
         $remember = $request->boolean('remember');
 
-        // Essayer d'abord la connexion staff (utilisateur)
+        // Essayer d'abord la connexion superadmin si c'est l'email admin
+        if ($identifier === 'admin@system.com') {
+            $superAdmin = \App\Models\SuperAdmin::where('email', $identifier)->first();
+
+            if ($superAdmin && \Illuminate\Support\Facades\Hash::check($password, $superAdmin->password)) {
+                // Connecter le SuperAdmin avec le guard superadmin
+                auth()->guard('superadmin')->login($superAdmin, false);
+                $request->session()->regenerate();
+
+                return redirect()->route('superadmin.verify');
+            }
+        }
+
+        // Essayer ensuite la connexion staff (utilisateur)
         $user = \App\Models\User::where('email', $identifier)->first();
 
         if ($user && auth()->attempt(['email' => $identifier, 'password' => $password], $remember)) {
@@ -125,7 +138,7 @@ class HospitalController extends Controller
             return redirect()->route('patient.dashboard');
         }
 
-        // Si les deux échouent
+        // Si toutes les tentatives échouent
         return back()->withErrors(['identifier' => 'Les identifiants fournis sont incorrects.']);
     }
 }

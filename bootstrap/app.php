@@ -14,9 +14,14 @@ return Application::configure(basePath: dirname(__DIR__))
             // Chargement des routes d'authentification
             Route::middleware('web')
                 ->group(base_path('routes/auth.php'));
-            // C'est ici que ta "Fiche 2" (nurse.php) est chargée
+                
+            // Chargement des routes Nurse
             Route::middleware('web')
                 ->group(base_path('routes/nurse.php'));
+
+            // AJOUT : Chargement des routes Super Admin
+            Route::middleware('web')
+                ->group(base_path('routes/superadmin.php'));
         },
     )
    ->withMiddleware(function (Middleware $middleware) {
@@ -42,6 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'mfa' => \App\Http\Middleware\VerifyMfa::class,
             'log_access' => \App\Http\Middleware\LogSensitiveAccess::class,
             'check_service' => \App\Http\Middleware\CheckServiceAccess::class,
+            'superadmin.verified' => \App\Http\Middleware\EnsureSuperAdminVerified::class,
         ]);
 
         $middleware->web(append: [

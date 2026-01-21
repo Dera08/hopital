@@ -10,7 +10,7 @@
                 <div class="card-header">
                     <h3 class="card-title">
                         <i class="fas fa-user-md mr-2"></i>
-                        Bienvenue, Dr. {{ auth()->user()->name }}
+                        Bienvenue, Dr. {{ auth()->user()?->name ?? 'Médecin' }}
                     </h3>
                 </div>
                 <div class="card-body">
