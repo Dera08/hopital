@@ -14,6 +14,10 @@ class WalkInConsultation extends Model
         'service_id',
         'status',
         'consultation_datetime',
+        'payment_transaction_id',
+        'payment_method',
+        'payment_operator',
+        'cashier_id',
     ];
 
     protected $casts = [
@@ -45,5 +49,10 @@ class WalkInConsultation extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function cashier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cashier_id');
     }
 }

@@ -76,23 +76,51 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
     // --- 2. LOGIQUE POUR L'INFIRMIER ---
     if ($user->role === 'nurse' || $user->role === 'infirmier') {
         $stats = $this->getStats($user);
-        $myPatients = $this->getActiveAdmissions($user);
         
-        $appointments = \App\Models\Appointment::with(['patient', 'doctor'])
-            ->whereHas('patient')
-            ->whereHas('doctor')
+        // 1. On récupère les RDV (Seulement si FACTURE PAYÉE et AUJOURD'HUI)
+        $allTodayPaid = \App\Models\Appointment::with(['patient', 'doctor', 'invoices', 'service', 'prestations'])
             ->where('hospital_id', $user->hospital_id)
             ->where('service_id', $user->service_id)
-            ->whereDate('appointment_datetime', '<=', today())
-            ->orderBy('appointment_datetime', 'desc')
+            ->where('status', 'paid')
+            ->whereDate('appointment_datetime', today())
             ->get();
 
-        $sentFiles = \App\Models\PatientVital::where('user_id', $user->id)
+        // On sépare les Vrais RDV des Sans RDV (Walk-ins)
+        $appointments = $allTodayPaid->where('type', '!=', 'walk-in');
+        $walkIns = $allTodayPaid->where('type', 'walk-in');
+
+        // 2. Historique des dossiers envoyés (30 dernières minutes)
+        $sentFiles = \App\Models\PatientVital::where('hospital_id', $user->hospital_id)
+            ->where('created_at', '>=', now()->subMinutes(30))
             ->latest()
-            ->take(10)
             ->get();
+
+        // 3. Patients de l'hôpital SANS RDV aujourd'hui (mais ayant déjà fréquenté ce service)
+        $patientIdsToCheck = $allTodayPaid->pluck('patient_id')->unique()->toArray();
+        $patientsWithoutApt = \App\Models\Patient::where('hospital_id', $user->hospital_id)
+            ->whereNotIn('id', $patientIdsToCheck)
+            ->where(function($query) use ($user) {
+                $query->whereHas('appointments', function($q) use ($user) {
+                    $q->where('service_id', $user->service_id);
+                })->orWhereHas('admissions.room', function($q) use ($user) {
+                    $q->where('service_id', $user->service_id);
+                });
+            })
+            ->latest()
+            ->limit(50)
+            ->get();
+
+        // 4. Patients hospitalisés (Même service)
+        $myPatients = $this->getActiveAdmissions($user);
         
-        return view('nurse.dashboard', compact('stats', 'myPatients', 'appointments', 'sentFiles'));
+        return view('nurse.dashboard', [
+            'stats' => $stats,
+            'myPatients' => $myPatients,
+            'appointments' => $appointments,
+            'walkIns' => $walkIns,
+            'sentFiles' => $sentFiles,
+            'patientsWithoutApt' => $patientsWithoutApt
+        ]);
     }
 
     // --- 3. LOGIQUE POUR LE CAISSIER ---
@@ -118,13 +146,34 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
     // On compte les dossiers vitaux reçus
     $pendingExams = \App\Models\PatientVital::where('hospital_id', $user->hospital_id)->count();
 
+    // Récupérer les jours où ce médecin est disponible
+    $availableDays = \App\Models\DoctorAvailability::where('doctor_id', $user->id)
+        ->where('is_active', true)
+        ->pluck('day_of_week')
+        ->toArray();
+
+    // Récupérer les rendez-vous en attente d'attribution (même service)
+    // FILTRE : Uniquement si la date du RDV correspond à un jour ouvré du médecin
+    $pendingServiceAppointments = \App\Models\Appointment::with(['patient', 'service'])
+        ->where('hospital_id', $user->hospital_id)
+        ->where('service_id', $user->service_id)
+        ->where('status', 'pending')
+        ->whereNull('doctor_id')
+        ->get()
+        ->filter(function($appointment) use ($availableDays) {
+            // Conversion du jour de la semaine en format anglais (ex: 'monday')
+            $dayName = strtolower(Carbon::parse($appointment->appointment_datetime)->format('l'));
+            return in_array($dayName, $availableDays);
+        });
+
     return view('medecin.dashboard', array_merge(compact(
         'stats',
         'todayAppointments',
         'criticalObservations',
         'myPatients',
         'criticalPatients',
-        'pendingExams'
+        'pendingExams',
+        'pendingServiceAppointments'
     ), ['hospitalizedPatients' => $myPatients]));
 }
 
@@ -184,6 +233,7 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
     {
         return Appointment::with(['patient', 'doctor', 'service'])
             ->whereDate('appointment_datetime', today())
+            ->whereIn('status', ['confirmed', 'scheduled', 'paid', 'completed'])
             ->when($user->isDoctor(), function($query) use ($user) {
                 return $query->where('doctor_id', $user->id);
             })
@@ -196,15 +246,22 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
 
     private function getActiveAdmissions($user)
     {
-        return Admission::with(['patient', 'room', 'doctor'])
-            ->whereHas('patient')
+        return Admission::with(['patient' => function($q) {
+                $q->withTrashed()->withoutGlobalScopes();
+            }, 'room', 'doctor'])
+            ->whereHas('patient', function($q) {
+                $q->withTrashed()->withoutGlobalScopes();
+            })
             ->where('status', 'active')
             ->when($user->isDoctor(), function($query) use ($user) {
-                return $query->where('doctor_id', $user->id);
-            })
-            ->when($user->service_id && !$user->isAdmin(), function($query) use ($user) {
-                return $query->whereHas('room', function($q) use ($user) {
-                    $q->where('service_id', $user->service_id);
+                $query->where(function($q) use ($user) {
+                    $q->where('doctor_id', $user->id);
+                    
+                    if ($user->service_id) {
+                        $q->orWhereHas('room', function($r) use ($user) {
+                            $r->where('service_id', $user->service_id);
+                        });
+                    }
                 });
             })
             ->latest('admission_date')
@@ -439,15 +496,11 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
         // Get invoice statistics for the hospital
         $invoices = \App\Models\Invoice::where('hospital_id', $hospitalId)->get();
 
-        $totalRevenue = $invoices->sum('total_amount');
-        $totalPaid = $invoices->sum(function ($invoice) {
-            return $invoice->payments->sum('amount');
-        });
+        $totalRevenue = $invoices->sum('total');
+        $totalPaid = $invoices->where('status', 'paid')->sum('total');
         $totalPending = $totalRevenue - $totalPaid;
-        $paidInvoices = $invoices->filter(function ($invoice) {
-            $paidAmount = $invoice->payments->sum('amount');
-            return $paidAmount >= $invoice->total_amount;
-        })->count();
+        
+        $paidInvoices = $invoices->where('status', 'paid')->count();
         $pendingInvoices = $invoices->count() - $paidInvoices;
 
         return [
@@ -474,15 +527,11 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
         // Get invoice statistics for the hospital
         $invoices = \App\Models\Invoice::where('hospital_id', $hospitalId)->get();
 
-        $totalRevenue = $invoices->sum('total_amount');
-        $totalPaid = $invoices->sum(function ($invoice) {
-            return $invoice->payments->sum('amount');
-        });
+        $totalRevenue = $invoices->sum('total');
+        $totalPaid = $invoices->where('status', 'paid')->sum('total');
         $totalPending = $totalRevenue - $totalPaid;
-        $paidInvoices = $invoices->filter(function ($invoice) {
-            $paidAmount = $invoice->payments->sum('amount');
-            return $paidAmount >= $invoice->total_amount;
-        })->count();
+        
+        $paidInvoices = $invoices->where('status', 'paid')->count();
         $pendingInvoices = $invoices->count() - $paidInvoices;
 
         return response()->json([
@@ -503,22 +552,23 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
         }
 
         // Get all invoices for this hospital
-        $invoices = \App\Models\Invoice::with(['patient', 'payments'])
+        $invoices = \App\Models\Invoice::with(['patient'])
             ->where('hospital_id', $user->hospital_id)
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($invoice) {
-                $totalPaid = $invoice->payments->sum('amount');
-                $remainingAmount = $invoice->total_amount - $totalPaid;
+                $isPaid = $invoice->status === 'paid';
+                $totalPaid = $isPaid ? $invoice->total : 0;
+                $remainingAmount = $isPaid ? 0 : $invoice->total;
 
                 return [
                     'id' => $invoice->id,
                     'invoice_number' => $invoice->invoice_number,
                     'patient_name' => $invoice->patient ? $invoice->patient->name : 'Patient inconnu',
-                    'total_amount' => $invoice->total_amount,
+                    'total_amount' => $invoice->total,
                     'paid_amount' => $totalPaid,
                     'remaining_amount' => $remainingAmount,
-                    'status' => $remainingAmount <= 0 ? 'PAYÉ' : ($totalPaid > 0 ? 'PARTIELLEMENT PAYÉ' : 'IMPAYÉ'),
+                    'status' => $invoice->status === 'paid' ? 'PAYÉ' : 'IMPAYÉ',
                     'created_at' => $invoice->created_at->format('d/m/Y'),
                     'due_date' => $invoice->due_date ? $invoice->due_date->format('d/m/Y') : null,
                 ];

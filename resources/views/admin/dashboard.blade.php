@@ -405,7 +405,7 @@ function refreshInvoicesData() {
 }
 
 function loadInvoiceStats() {
-    fetch('/dashboard/invoices/stats', {
+    fetch(`{{ url('dashboard/invoices/stats') }}`, {
         method: 'GET',
         headers: {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
@@ -446,7 +446,7 @@ function loadInvoiceStats() {
 }
 
 function loadInvoicesTable() {
-    fetch('/dashboard/invoices/data', {
+    fetch(`{{ url('dashboard/invoices/data') }}`, {
         method: 'GET',
         headers: {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',

@@ -11,92 +11,29 @@ use Illuminate\Validation\ValidationException;
 
 class PatientAuthController extends Controller
 {
-    // Afficher le formulaire de connexion
+
     public function showLoginForm()
     {
-        return view('patients.auth.login');
+        return view('patients.auth.login-patient');
     }
 
-    // Traiter la connexion
-  public function login(Request $request)
-{
-    // Log de début
-    \Log::info('=== DÉBUT TENTATIVE CONNEXION PATIENT ===');
-    \Log::info('Données reçues', [
-        'identifier' => $request->identifier,
-        'remember' => $request->filled('remember'),
-        'url_actuelle' => url()->current(),
-    ]);
-
-    $request->validate([
-        'identifier' => 'required|string',
-        'password' => 'required|string',
-    ]);
-
-    // Recherche du patient SANS le global scope
-    $patient = Patient::withoutGlobalScope('hospital')
-        ->where(function($query) use ($request) {
-            $query->where('email', $request->identifier)
-                  ->orWhere('ipu', $request->identifier);
-        })
-        ->where('is_active', true)
-        ->first();
-
-    \Log::info('Résultat recherche patient', [
-        'patient_trouvé' => $patient ? 'OUI' : 'NON',
-        'patient_id' => $patient?->id ?? 'N/A',
-        'patient_email' => $patient?->email ?? 'N/A',
-        'patient_nom' => $patient?->full_name ?? 'N/A',
-    ]);
-
-    if (!$patient) {
-        \Log::error('Patient NON TROUVÉ');
-        return back()->withErrors([
-            'identifier' => 'Aucun patient trouvé avec cet identifiant.',
-        ])->withInput();
-    }
-
-    // Vérification du mot de passe
-    $passwordCheck = Hash::check($request->password, $patient->password);
-    \Log::info('Vérification mot de passe', [
-        'mot_de_passe_valide' => $passwordCheck ? 'OUI' : 'NON'
-    ]);
-
-    if (!$passwordCheck) {
-        \Log::error('Mot de passe INCORRECT');
-        return back()->withErrors([
-            'identifier' => 'Mot de passe incorrect.',
-        ])->withInput();
-    }
-
-    // Tentative de connexion
-    \Log::info('Tentative de connexion avec le guard patients');
-    
-    try {
-        Auth::guard('patients')->login($patient, $request->filled('remember'));
-        $request->session()->regenerate();
-        
-        \Log::info('Connexion réussie !', [
-            'patient_connecté' => Auth::guard('patients')->check() ? 'OUI' : 'NON',
-            'patient_id' => Auth::guard('patients')->id(),
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
         ]);
-        
-        \Log::info('Redirection vers patient.dashboard');
-        
-        return redirect()->route('patient.dashboard')
-            ->with('success', 'Bienvenue, ' . $patient->first_name . ' !');
-            
-    } catch (\Exception $e) {
-        \Log::error('ERREUR lors de la connexion', [
-            'message' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        
+
+        if (Auth::guard('patients')->attempt($credentials, $request->remember)) {
+            $request->session()->regenerate();
+            return redirect()->intended(route('patient.dashboard'));
+        }
+
         return back()->withErrors([
-            'identifier' => 'Une erreur est survenue lors de la connexion.',
-        ])->withInput();
+            'email' => 'Les identifiants fournis ne correspondent pas à nos enregistrements.',
+        ])->onlyInput('email');
     }
-}
+
     // Afficher le formulaire d'inscription
     public function showRegistrationForm()
     {
@@ -146,7 +83,7 @@ class PatientAuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('patient.login')
+        return redirect()->route('login')
             ->with('success', 'Vous avez été déconnecté avec succès.');
     }
 }

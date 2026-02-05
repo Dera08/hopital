@@ -15,24 +15,26 @@
 
         {{-- Cartes de statistiques --}}
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border-l-8 border-green-500 flex items-center justify-between">
                 <div>
-                    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Recettes Total</p>
-                    <p class="text-2xl font-black text-gray-900 mt-1">{{ number_format($todayStats['total_revenue_today'], 0, ',', ' ') }} F</p>
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Recettes</p>
+                    <div class="mt-1">
+                        <p class="text-2xl font-black text-gray-900">{{ number_format($stats['total_revenue'], 0, ',', ' ') }} F <span class="text-xs text-gray-400 font-medium">Total</span></p>
+                        <p class="text-sm font-bold text-green-600">{{ number_format($stats['today_revenue'], 0, ',', ' ') }} F <span class="text-xs text-green-400 font-medium">Aujourd'hui</span></p>
+                    </div>
                 </div>
                 <div class="p-4 bg-green-50 rounded-xl text-green-600"><i class="fas fa-wallet text-2xl"></i></div>
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-sm border-l-8 border-blue-500 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Actes Payés</p>
-                    <p class="text-2xl font-black text-gray-900 mt-1">{{ $todayStats['paid_today'] }}</p>
+                    <p class="text-2xl font-black text-gray-900 mt-1">{{ $stats['paid_total'] }}</p>
                 </div>
                 <div class="p-4 bg-blue-50 rounded-xl text-blue-600"><i class="fas fa-check-double text-2xl"></i></div>
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-sm border-l-8 border-orange-500 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">En Attente</p>
-                    <p class="text-2xl font-black text-gray-900 mt-1">{{ $todayStats['pending'] }}</p>
+                    <p class="text-2xl font-black text-gray-900 mt-1">{{ $stats['pending'] }}</p>
                 </div>
                 <div class="p-4 bg-orange-50 rounded-xl text-orange-600"><i class="fas fa-hourglass-half text-2xl"></i></div>
             </div>
@@ -44,7 +46,7 @@
                 <h3 class="font-black text-gray-700 uppercase text-sm tracking-tighter">Dossiers en Attente de Paiement</h3>
                 <span class="px-2 py-1 bg-orange-100 text-orange-700 text-[10px] font-black rounded-md">{{ $pendingPayments->count() }} DOSSIERS</span>
             </div>
-            <div class="divide-y divide-gray-50 max-h-[600px] overflow-y-auto">
+            <div class="divide-y divide-gray-50 max-h-[600px] overflow-y-auto overflow-x-auto">
                 @forelse($pendingPayments as $appointment)
                     <div class="p-5 hover:bg-blue-50/30 transition-all flex items-center justify-between group">
                         <div class="flex items-center gap-4">
@@ -55,7 +57,7 @@
                                 <h4 class="font-bold text-gray-900 text-sm">{{ $appointment->patient->name }}</h4>
                                 <p class="text-[11px] text-gray-500 uppercase tracking-tighter">
                                     {{ $appointment->service->name }} 
-                                    @if($appointment->prestations->count() > 0)
+                                    @if(isset($appointment->prestations) && $appointment->prestations->count() > 0)
                                         <span class="text-blue-500">(+{{ $appointment->prestations->count() }} actes)</span>
                                     @endif
                                 </p>
@@ -66,13 +68,15 @@
                             <div class="text-right font-black text-gray-900">
                                 {{-- Calcul du total incluant les prestations --}}
                                 @php 
-                                    $totalApt = $appointment->service->price + $appointment->prestations->sum('pivot.total');
+                                    $servicePrice = $appointment->service->price ?? 0;
+                                    $prestationsTotal = optional($appointment->prestations)->sum('pivot.total') ?? 0;
+                                    $totalApt = $servicePrice + $prestationsTotal;
                                 @endphp
                                 {{ number_format($totalApt, 0, ',', ' ') }} F
                             </div>
                             
                             {{-- Bouton Encaisser (Appelle la modale) --}}
-                            <button onclick="openPaymentModal({{ $appointment->id }}, '{{ addslashes($appointment->patient->name) }}', {{ $totalApt }})" 
+                            <button onclick="openPaymentModal({{ $appointment->id }}, '{{ addslashes($appointment->patient->name) }}', {{ $totalApt }}, '{{ $appointment->payment_type }}')" 
                                     class="opacity-0 group-hover:opacity-100 bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all hover:bg-blue-700 shadow-md">
                                 <i class="fas fa-cash-register mr-1"></i> ENCAISSER
                             </button>
@@ -137,13 +141,24 @@
 
     {{-- Script de la Modale --}}
     <script>
-        function openPaymentModal(id, name, amount) {
+        function openPaymentModal(id, name, amount, paymentType) {
             document.getElementById('modalPatientName').innerText = name;
             document.getElementById('modalAmount').innerText = amount.toLocaleString();
             document.getElementById('hiddenAmount').value = amount;
             
             let form = document.getElementById('paymentForm');
-            form.action = `/cashier/appointments/${id}/validate-payment`;
+            
+            if (paymentType === 'appointment') {
+                form.action = `/cashier/appointments/${id}/validate-payment`;
+            } else if (paymentType === 'walk-in') {
+                form.action = `/cashier/walk-in/${id}/validate-payment`;
+            } else if (paymentType === 'lab_request') {
+                form.action = `/cashier/lab-requests/${id}/pay`;
+            } else {
+                 // Fallback or error
+                 console.error('Unknown payment type');
+                 form.action = '#';
+            }
             
             const modal = document.getElementById('paymentModal');
             modal.classList.remove('hidden');

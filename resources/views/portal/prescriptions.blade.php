@@ -61,7 +61,7 @@
                                 </td>
                                 <td class="px-6 py-4 text-right">
                                     <div class="flex justify-end space-x-2">
-                                        <a href="#" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium shadow-sm">
+                                        <a href="{{ route('patient.prescriptions.download', $prescription->id) }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium shadow-sm">
                                             <i class="fas fa-file-pdf mr-2"></i> Télécharger
                                         </a>
                                     </div>

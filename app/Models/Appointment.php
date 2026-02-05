@@ -21,7 +21,8 @@ class Appointment extends Model
     protected $fillable = [
         'hospital_id', 'patient_id', 'doctor_id', 'service_id',
         'appointment_datetime', 'duration', 'status', 'type',
-        'reason', 'notes'
+        'reason', 'notes', 'consultation_type', 'home_address', 'cashier_id',
+        'payment_transaction_id', 'payment_method', 'payment_operator'
     ];
 
     protected $casts = [
@@ -29,7 +30,7 @@ class Appointment extends Model
     ];
 
     public function patient(): BelongsTo {
-        return $this->belongsTo(Patient::class);
+        return $this->belongsTo(Patient::class)->withoutGlobalScopes(['hospital', 'hospital_filter']);
     }
 
     public function doctor(): BelongsTo {
@@ -54,5 +55,9 @@ class Appointment extends Model
     // Relation pour accéder à la dernière facture (pour compatibilité avec la vue)
     public function invoice() {
         return $this->hasOne(\App\Models\Invoice::class, 'appointment_id')->latest();
+    }
+
+    public function cashier(): BelongsTo {
+        return $this->belongsTo(User::class, 'cashier_id');
     }
 }

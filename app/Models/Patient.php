@@ -42,20 +42,7 @@ class Patient extends Authenticatable
         'password' => 'hashed',
     ];
 
-    // ✅ CORRECTION CRITIQUE DU GLOBAL SCOPE
-    protected static function booted()
-    {
-        static::addGlobalScope('hospital', function ($builder) {
-            // On n'applique le scope hospital QUE pour le staff (guard 'web')
-            // Pas pour les patients authentifiés via le portail
-            if (auth()->guard('web')->check()) {
-                $user = auth()->guard('web')->user();
-                if ($user && isset($user->hospital_id)) {
-                    $builder->where('hospital_id', $user->hospital_id);
-                }
-            }
-        });
-    }
+
 
     // --- RELATIONS ---
     public function admissions()
@@ -98,6 +85,11 @@ class Patient extends Authenticatable
         return $this->hasMany(PatientVital::class, 'patient_ipu', 'ipu');
     }
 
+    public function labRequests()
+    {
+        return $this->hasMany(LabRequest::class, 'patient_ipu', 'ipu');
+    }
+
     // --- ACCESSEURS ---
     public function getFullNameAttribute(): string
     {
@@ -114,7 +106,7 @@ class Patient extends Authenticatable
     {
         do {
             $ipu = 'PAT' . date('Y') . str_pad(mt_rand(1, 99999), 5, '0', STR_PAD_LEFT);
-        } while (self::withoutGlobalScope('hospital')->where('ipu', $ipu)->exists());
+        } while (self::withoutGlobalScopes()->where('ipu', $ipu)->exists());
         
         return $ipu;
     }
@@ -134,4 +126,15 @@ class Patient extends Authenticatable
     {
         return $this->password;
     }
+
+    // --- RÔLES STUBS (Pour la compatibilité avec les layouts partagés) ---
+    public function isDoctor(): bool { return false; }
+    public function isNurse(): bool { return false; }
+    public function isAdmin(): bool { return false; }
+    public function isCashier(): bool { return false; }
+    public function isInternalDoctor(): bool { return false; }
+    public function isExternalDoctor(): bool { return false; }
+    public function isDoctorLab(): bool { return false; }
+    public function isLabTechnician(): bool { return false; }
+    public function hasRole($role): bool { return false; }
 }

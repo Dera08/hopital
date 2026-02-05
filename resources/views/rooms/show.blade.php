@@ -11,6 +11,18 @@
         <h1 class="text-2xl font-bold text-gray-800">Chambre #{{ $room->room_number }}</h1>
     </div>
 
+    @if(session('success'))
+    <div class="mb-6 bg-green-50 border-l-4 border-green-500 p-4 rounded">
+        <p class="text-green-700">{{ session('success') }}</p>
+    </div>
+    @endif
+
+    @if(session('error'))
+    <div class="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
+        <p class="text-red-700">{{ session('error') }}</p>
+    </div>
+    @endif
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {{-- Infos de la chambre --}}
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
@@ -27,7 +39,7 @@
                 
                 @php 
                     $total = $room->bed_capacity ?: 1; 
-                    $occupiedCount = $room->beds->where('status', 'occupied')->count();
+                    $occupiedCount = $room->beds->where('is_available', false)->count();
                     $percent = ($occupiedCount / $total) * 100;
                 @endphp
 
@@ -57,20 +69,20 @@
                 <tbody class="divide-y divide-gray-100">
                     @foreach($room->beds as $bed)
                     <tr>
-                        <td class="px-6 py-4 font-bold text-gray-700">{{ $bed->bed_tag }}</td>
+                        <td class="px-6 py-4 font-bold text-gray-700">{{ $bed->bed_number }}</td>
                         <td class="px-6 py-4">
-                            <span class="px-2 py-1 text-xs font-bold rounded-full {{ $bed->status == 'available' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600' }}">
-                                {{ $bed->status == 'available' ? 'Libre' : 'Occupé' }}
+                            <span class="px-2 py-1 text-xs font-bold rounded-full {{ $bed->is_available ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600' }}">
+                                {{ $bed->is_available ? 'Libre' : 'Occupé' }}
                             </span>
                         </td>
                         <td class="px-6 py-4 text-sm text-gray-600">
-                            {{ $bed->patient->name ?? 'Aucun patient' }}
+                            {{ $bed->patient?->name ?? 'Aucun patient' }}
                         </td>
                         <td class="px-6 py-4 text-right">
-                            @if($bed->status == 'available')
-                                <button class="text-blue-600 hover:underline text-sm font-bold">Assigner</button>
+                            @if($bed->is_available)
+                                <button onclick="openAssignModal({{ $bed->id }}, '{{ $bed->bed_number }}')" class="text-blue-600 hover:underline text-sm font-bold">Assigner</button>
                             @else
-                                <button class="text-red-600 hover:underline text-sm font-bold">Libérer</button>
+                                <button onclick="openReleaseModal({{ $bed->id }}, '{{ $bed->bed_number }}')" class="text-red-600 hover:underline text-sm font-bold">Libérer</button>
                             @endif
                         </td>
                     </tr>
@@ -80,4 +92,81 @@
         </div>
     </div>
 </div>
+
+{{-- Modal Assignation --}}
+<div id="assignModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">Assigner un Patient</h3>
+        <p class="text-sm text-gray-600 mb-6">Lit : <span id="assignBedName" class="font-bold text-blue-600"></span></p>
+        
+        <form method="POST" action="{{ route('rooms.assign', $room) }}">
+            @csrf
+            <input type="hidden" name="bed_id" id="assignBedId">
+            
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Sélectionner le Patient</label>
+                <select name="patient_id" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">-- Choisir un patient --</option>
+                    @foreach($patients as $patient)
+                        <option value="{{ $patient->id }}">{{ $patient->name }} {{ $patient->first_name }} ({{ $patient->ipu }})</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="flex gap-4">
+                <button type="button" onclick="closeAssignModal()" class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Annuler</button>
+                <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Assigner</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Modal Libération --}}
+<div id="releaseModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">Libérer le Lit</h3>
+        <p class="text-sm text-gray-600 mb-6">Êtes-vous sûr de vouloir libérer le lit <span id="releaseBedName" class="font-bold text-red-600"></span> ?</p>
+        
+        <form method="POST" action="{{ route('rooms.release', $room) }}">
+            @csrf
+            <input type="hidden" name="bed_id" id="releaseBedId">
+
+            <div class="flex gap-4">
+                <button type="button" onclick="closeReleaseModal()" class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Annuler</button>
+                <button type="submit" class="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700">Libérer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAssignModal(bedId, bedName) {
+    document.getElementById('assignBedId').value = bedId;
+    document.getElementById('assignBedName').textContent = bedName;
+    document.getElementById('assignModal').classList.remove('hidden');
+}
+
+function closeAssignModal() {
+    document.getElementById('assignModal').classList.add('hidden');
+}
+
+function openReleaseModal(bedId, bedName) {
+    document.getElementById('releaseBedId').value = bedId;
+    document.getElementById('releaseBedName').textContent = bedName;
+    document.getElementById('releaseModal').classList.remove('hidden');
+}
+
+function closeReleaseModal() {
+    document.getElementById('releaseModal').classList.add('hidden');
+}
+
+// Fermer les modales en cliquant en dehors
+document.getElementById('assignModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAssignModal();
+});
+
+document.getElementById('releaseModal').addEventListener('click', function(e) {
+    if (e.target === this) closeReleaseModal();
+});
+</script>
 @endsection

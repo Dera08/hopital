@@ -21,64 +21,100 @@
             </a>
         </div>
 
-        <!-- Filtres et Recherche -->
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-            <form method="GET" action="{{ route('users.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <!-- Filtres et Recherche Haut de Gamme -->
+        <div class="bg-white rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-100/50 p-10 mb-10">
+            <form method="GET" action="{{ route('users.index') }}" class="space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-x-10 gap-y-8">
+                    
+                    <!-- Ligne 1 : Recherche et Rôle -->
+                    <div class="md:col-span-2">
+                        <label class="block text-[11px] font-normal text-slate-400 uppercase tracking-widest mb-3 ml-1">Rechercher un collaborateur</label>
+                        <div class="relative group">
+                            <input type="text" name="search" value="{{ request('search') }}" placeholder="Ex: Jean Dupont, email@clic.com..." 
+                                class="w-full px-6 py-4 pl-14 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-100 transition-all text-slate-600 placeholder:text-slate-300">
+                            <i class="bi bi-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors"></i>
+                        </div>
+                    </div>
 
-                <!-- Recherche -->
-                <div class="md:col-span-2">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Recherche</label>
-                    <div class="relative">
-                        <input type="text" name="search" value="{{ request('search') }}" placeholder="Nom, email..." class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
+                    <div>
+                        <label class="block text-[11px] font-normal text-slate-400 uppercase tracking-widest mb-3 ml-1">Rôle</label>
+                        <select name="role" class="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-100 transition-all text-slate-600 appearance-none cursor-pointer">
+                            <option value="">Tous les rôles</option>
+                            <option value="admin" {{ request('role') == 'admin' ? 'selected' : '' }}>Administrateur</option>
+                            <option value="doctor" {{ request('role') == 'doctor' ? 'selected' : '' }}>Médecin</option>
+                            <option value="nurse" {{ request('role') == 'nurse' ? 'selected' : '' }}>Infirmier</option>
+                            <option value="lab_technician" {{ request('role') == 'lab_technician' ? 'selected' : '' }}>Technicien Labo</option>
+                            <option value="administrative" {{ request('role') == 'administrative' ? 'selected' : '' }}>Staff Administratif</option>
+                        </select>
+                    </div>
+
+                    <!-- Ligne 2 : Pôle, Service et Statut -->
+                    <div>
+                        <label class="block text-[11px] font-normal text-slate-400 uppercase tracking-widest mb-3 ml-1">Pôle Hospitalier</label>
+                        <select name="pole" id="poleFilter" class="w-full px-6 py-4 bg-blue-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-100 transition-all text-blue-700 appearance-none cursor-pointer font-normal">
+                            <option value="">Tous les pôles</option>
+                            <option value="medical" {{ request('pole') == 'medical' ? 'selected' : '' }}>🏥 Soins (Médical)</option>
+                            <option value="technical" {{ request('pole') == 'technical' ? 'selected' : '' }}>🔬 Technique (Labo)</option>
+                            <option value="support" {{ request('pole') == 'support' ? 'selected' : '' }}>💳 Caisse (Support)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-normal text-slate-400 uppercase tracking-widest mb-3 ml-1">Service</label>
+                        <select name="service_id" id="serviceFilter" class="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-100 transition-all text-slate-600 appearance-none cursor-pointer">
+                            <option value="" data-pole="all">Tous les services</option>
+                            @foreach($services as $service)
+                            <option value="{{ $service->id }}" data-pole="{{ $service->type }}" {{ request('service_id') == $service->id ? 'selected' : '' }} class="{{ request('pole') && request('pole') != $service->type ? 'hidden' : '' }}">
+                                {{ $service->name }}
+                            </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-normal text-slate-400 uppercase tracking-widest mb-3 ml-1">Statut</label>
+                        <select name="is_active" class="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-100 transition-all text-slate-600 appearance-none cursor-pointer">
+                            <option value="">Tous les statuts</option>
+                            <option value="1" {{ request('is_active') == '1' ? 'selected' : '' }}>Comptes Actifs</option>
+                            <option value="0" {{ request('is_active') == '0' ? 'selected' : '' }}>Comptes Inactifs</option>
+                        </select>
                     </div>
                 </div>
 
-                <!-- Rôle -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Rôle</label>
-                    <select name="role" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                        <option value="">Tous</option>
-                        <option value="admin" {{ request('role') == 'admin' ? 'selected' : '' }}>Administrateur</option>
-                        <option value="doctor" {{ request('role') == 'doctor' ? 'selected' : '' }}>Médecin</option>
-                        <option value="nurse" {{ request('role') == 'nurse' ? 'selected' : '' }}>Infirmier</option>
-                        <option value="administrative" {{ request('role') == 'administrative' ? 'selected' : '' }}>Administratif</option>
-                    </select>
-                </div>
-
-                <!-- Service -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Service</label>
-                    <select name="service_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                        <option value="">Tous</option>
-                        @foreach($services as $service)
-                        <option value="{{ $service->id }}" {{ request('service_id') == $service->id ? 'selected' : '' }}>{{ $service->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <!-- Statut -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Statut</label>
-                    <select name="is_active" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                        <option value="">Tous</option>
-                        <option value="1" {{ request('is_active') == '1' ? 'selected' : '' }}>Actifs</option>
-                        <option value="0" {{ request('is_active') == '0' ? 'selected' : '' }}>Inactifs</option>
-                    </select>
-                </div>
-
-                <!-- Boutons -->
-                <div class="md:col-span-4 flex justify-end space-x-3">
-                    <a href="{{ route('users.index') }}" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
-                        Réinitialiser
-                    </a>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-                        Filtrer
-                    </button>
+                <div class="flex items-center justify-between pt-6 border-t border-slate-50">
+                    <p class="text-xs text-slate-400 italic">Personnalisez votre vue en combinant les filtres ci-dessus.</p>
+                    <div class="flex gap-4">
+                        <a href="{{ route('users.index') }}" class="px-8 py-4 bg-slate-100 text-slate-500 rounded-2xl hover:bg-slate-200 transition-all text-sm tracking-wide">
+                            Réinitialiser
+                        </a>
+                        <button type="submit" class="px-10 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 text-sm tracking-wide flex items-center gap-3">
+                            Filtrer la liste <i class="bi bi-arrow-right"></i>
+                        </button>
+                    </div>
                 </div>
             </form>
+
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const poleFilter = document.getElementById('poleFilter');
+                    const serviceFilter = document.getElementById('serviceFilter');
+                    const options = serviceFilter.querySelectorAll('option:not([data-pole="all"])');
+
+                    poleFilter.addEventListener('change', function() {
+                        const selectedPole = this.value;
+                        options.forEach(option => {
+                            if (!selectedPole || option.dataset.pole === selectedPole) {
+                                option.classList.remove('hidden');
+                                option.disabled = false;
+                            } else {
+                                option.classList.add('hidden');
+                                option.disabled = true;
+                                if(option.selected) serviceFilter.value = '';
+                            }
+                        });
+                    });
+                });
+            </script>
         </div>
 
         <!-- Table des utilisateurs -->

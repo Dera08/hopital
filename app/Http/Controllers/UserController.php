@@ -94,6 +94,12 @@ class UserController extends Controller
             $query->where('service_id', $request->service_id);
         }
 
+        if ($request->filled('pole')) {
+            $query->whereHas('service', function($q) use ($request) {
+                $q->where('type', $request->pole);
+            });
+        }
+
         if ($request->filled('is_active')) {
             $query->where('is_active', $request->is_active);
         }
@@ -102,7 +108,11 @@ class UserController extends Controller
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('registration_number', 'like', "%{$search}%")
+                  ->orWhereHas('service', function($sq) use ($search) {
+                      $sq->where('name', 'like', "%{$search}%");
+                  });
             });
         }
 
@@ -124,7 +134,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:admin,doctor,nurse,administrative,cashier',
+            'role' => 'required|in:admin,doctor,nurse,administrative,cashier,lab_technician,internal_doctor,doctor_lab',
             'service_id' => 'nullable|exists:services,id',
             'phone' => 'nullable|string|max:20',
             'registration_number' => 'nullable|string|max:50',
@@ -132,6 +142,16 @@ class UserController extends Controller
 
         DB::beginTransaction();
         try {
+            // Restriction métier : Pas de médecin/infirmier dans les pôles Support (Caisse)
+            if ($request->filled('service_id')) {
+                $service = Service::find($request->service_id);
+                if ($service && $service->type === 'support') {
+                    if (in_array($validated['role'], ['doctor', 'nurse', 'internal_doctor', 'doctor_lab'])) {
+                        return back()->withInput()->withErrors(['service_id' => 'Les rôles médicaux ne peuvent pas être affectés à un Pôle de Caisse (Support).']);
+                    }
+                }
+            }
+
             $validated['password'] = Hash::make($validated['password']);
             $validated['is_active'] = true;
             $validated['hospital_id'] = auth()->user()->hospital_id;
@@ -147,7 +167,7 @@ class UserController extends Controller
             return redirect()->route('users.index')->with('success', 'Utilisateur créé avec succès.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withInput()->withErrors(['error' => 'Erreur lors de la création.']);
+            return back()->withInput()->withErrors(['error' => 'Erreur lors de la création : ' . $e->getMessage()]);
         }
     }
 
@@ -177,20 +197,33 @@ class UserController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $user->id,
-            'role' => 'required|in:admin,doctor,nurse,administrative,cashier',
+            'role' => 'required|in:admin,doctor,nurse,administrative,cashier,lab_technician,internal_doctor,doctor_lab',
             'service_id' => 'nullable|exists:services,id',
             'phone' => 'nullable|string|max:20',
             'registration_number' => 'nullable|string|max:50',
             'password' => 'nullable|string|min:8|confirmed',
+            'is_active' => 'nullable|boolean',
         ]);
 
         DB::beginTransaction();
         try {
+            // Restriction métier : Pas de médecin/infirmier dans les pôles Support (Caisse)
+            if ($request->filled('service_id')) {
+                $service = Service::find($request->service_id);
+                if ($service && $service->type === 'support') {
+                    if (in_array($validated['role'], ['doctor', 'nurse', 'internal_doctor', 'doctor_lab'])) {
+                        return back()->withInput()->withErrors(['service_id' => 'Les rôles médicaux ne peuvent pas être affectés à un Pôle de Caisse (Support).']);
+                    }
+                }
+            }
+
             if (!empty($validated['password'])) {
                 $validated['password'] = Hash::make($validated['password']);
             } else {
                 unset($validated['password']);
             }
+
+            $validated['is_active'] = $request->has('is_active');
 
             $oldData = $user->toArray();
             $user->update($validated);
@@ -206,7 +239,7 @@ class UserController extends Controller
             return redirect()->route('users.show', $user)->with('success', 'Utilisateur mis à jour avec succès.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withInput()->withErrors(['error' => 'Erreur lors de la mise à jour.']);
+            return back()->withInput()->withErrors(['error' => 'Erreur lors de la mise à jour : ' . $e->getMessage()]);
         }
     }
 

@@ -11,10 +11,22 @@ class Invoice extends Model
     use HasFactory, BelongsToHospital;
 
     protected $fillable = [
-       'hospital_id', 'invoice_number', 'patient_id', 'appointment_id', // J'ai ajouté appointment_id
-       'admission_id', 'invoice_date', 'due_date', 'subtotal', 'tax',
-       'total', 'status', 'paid_at', 'payment_method', 'notes'
+       'hospital_id', 'service_id', 'invoice_number', 'patient_id', 'appointment_id',
+       'admission_id', 'lab_request_id', 'walk_in_consultation_id',
+       'invoice_date', 'due_date', 'subtotal', 'tax',
+       'total', 'status', 'paid_at', 'payment_method', 'payment_operator', 'notes',
+       'cashier_id' // Added
     ];
+
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(Service::class);
+    }
+
+    public function labRequest(): BelongsTo
+    {
+        return $this->belongsTo(LabRequest::class);
+    }
 
     protected $casts = [
         'invoice_date' => 'date',
@@ -33,7 +45,7 @@ class Invoice extends Model
 
     public function patient(): BelongsTo
     {
-        return $this->belongsTo(Patient::class);
+        return $this->belongsTo(Patient::class)->withTrashed();
     }
 
     public function admission(): BelongsTo
@@ -44,6 +56,11 @@ class Invoice extends Model
     public function walkInConsultation(): BelongsTo
     {
         return $this->belongsTo(WalkInConsultation::class);
+    }
+    
+    public function cashier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cashier_id');
     }
 
     public function items()

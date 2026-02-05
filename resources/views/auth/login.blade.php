@@ -87,7 +87,29 @@
                     </svg>
                     Se connecter
                 </button>
+
+                <div class="mt-6 text-center space-y-2">
+                    <p class="text-sm text-gray-600">
+                        Nouveau sur HospitSIS ? 
+                        <a href="{{ route('patient.register') }}" class="font-medium text-blue-600 hover:text-blue-500">
+                            Créer un compte patient
+                        </a>
+                    </p>
+                    <p class="text-xs text-gray-500">
+                        Médecin ou personnel ? <a href="{{ route('select-portal') }}" class="hover:text-blue-600 underline">Inscrivez-vous ici</a>
+                    </p>
+                </div>
             </form>
+
+            {{-- Retour Accueil --}}
+            <div class="mt-8 pt-6 border-t border-gray-100 text-center">
+                <a href="/" class="inline-flex items-center text-sm text-gray-400 hover:text-blue-600 transition-colors">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Retour à la page d'accueil
+                </a>
+            </div>
         </div>
 
         <p class="text-center text-sm text-gray-600 mt-8">

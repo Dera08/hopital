@@ -90,7 +90,7 @@
                         </div>
                         <div class="flex items-center text-sm">
                             <i class="fas fa-venus-mars text-blue-600 w-5 mr-3"></i>
-                            <span class="text-gray-700">{{ $patient->gender === 'M' ? 'Masculin' : ($patient->gender === 'F' ? 'Féminin' : 'Autre') }}</span>
+                            <span class="text-gray-700">{{ $patient->gender === 'Homme' ? 'Masculin' : ($patient->gender === 'Femme' ? 'Féminin' : 'Autre') }}</span>
                         </div>
                         @if($patient->blood_group)
                         <div class="flex items-center text-sm">
@@ -177,6 +177,55 @@
                                     disabled
                                     class="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg cursor-not-allowed"
                                 >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section Informations Médicales -->
+                    <div class="bg-white rounded-xl shadow-md p-6">
+                        <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                            <i class="fas fa-file-medical text-red-600 mr-3"></i>
+                            Informations médicales
+                        </h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Groupe sanguin</label>
+                                <select 
+                                    name="blood_group" 
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="">Sélectionnez votre groupe sanguin</option>
+                                    @foreach(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as $group)
+                                        <option value="{{ $group }}" {{ old('blood_group', $patient->blood_group) == $group ? 'selected' : '' }}>
+                                            {{ $group }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    <i class="fas fa-allergies mr-2"></i>Allergies
+                                </label>
+                                <textarea 
+                                    name="allergies" 
+                                    rows="2"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Ex: Pénicilline, Arachides... (Séparez par des virgules)"
+                                >{{ old('allergies', is_array($patient->allergies) ? implode(', ', $patient->allergies) : $patient->allergies) }}</textarea>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    <i class="fas fa-history mr-2"></i>Antécédents médicaux
+                                </label>
+                                <textarea 
+                                    name="medical_history" 
+                                    rows="3"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="Vos antécédents médicaux ou chirurgicaux importants"
+                                >{{ old('medical_history', $patient->medical_history) }}</textarea>
                             </div>
                         </div>
                     </div>

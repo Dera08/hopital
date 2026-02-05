@@ -76,7 +76,12 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 text-sm text-gray-600">
-                                    {{ $prestation->service ? $prestation->service->name : 'Service non défini' }}
+                                    <div class="flex flex-col">
+                                        <span>{{ $prestation->service ? $prestation->service->name : 'Service non défini' }}</span>
+                                        @if($prestation->service && $prestation->service->is_caisse)
+                                            <span class="text-[10px] text-orange-500 font-bold uppercase tracking-tighter">Caisse (Collecteur)</span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="px-6 py-4">
                                     <div class="flex flex-col gap-1">

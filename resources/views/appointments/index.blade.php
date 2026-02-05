@@ -24,7 +24,7 @@
 
        {{-- REMPLACER LE BLOC DU FORMULAIRE PAR CELUI-CI --}}
 <div class="bg-white rounded-lg shadow p-6 mb-6">
-   <form action="{{ auth()->user()?->role === 'doctor' ? route('medecin.dashboard') : route('appointments.index') }}" method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+   <form action="{{ route('appointments.index') }}" method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Date</label>
             <input type="date" name="date" value="{{ request('date') }}" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
@@ -96,12 +96,18 @@
                                 <div class="text-sm font-medium text-gray-900">{{ $appointment->patient->full_name }}</div>
                                 <div class="text-sm text-gray-500">{{ $appointment->patient->ipu }}</div>
                             @else
-                                <div class="text-sm font-medium text-red-600">Patient supprimé</div>
+                                <div class="text-sm font-medium text-red-600">Patient introuvable</div>
                                 <div class="text-sm text-gray-500">N/A</div>
                             @endif
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ $appointment->doctor ? $appointment->doctor->name : 'Médecin supprimé' }}
+                            @if($appointment->doctor)
+                                {{ $appointment->doctor->name }}
+                            @else
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                    Non assigné
+                                </span>
+                            @endif
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {{ $appointment->service ? $appointment->service->name : 'Service supprimé' }}
@@ -171,7 +177,7 @@
         // Récupérer le token CSRF à partir de la balise meta
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
-        fetch(`/appointments/${appointmentId}/status`, {
+        fetch(`{{ url('appointments') }}/${appointmentId}/status`, {
             method: 'POST', // On utilise POST pour simuler PATCH, si nécessaire
             headers: {
                 'Content-Type': 'application/json',

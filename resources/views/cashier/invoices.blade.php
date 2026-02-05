@@ -32,10 +32,14 @@
                 <tbody class="divide-y divide-gray-50">
                     @foreach($invoices as $invoice)
                         @php
-                            $appointment = $invoice->admission ? $invoice->admission->appointment : null;
-                            $totalPrestations = $appointment ? $appointment->prestations->sum('pivot.total') : 0;
-                            $prixService = $appointment ? ($appointment->service->price ?? 0) : 0;
-                            $montantTotal = ($invoice->total > 0) ? $invoice->total : ($prixService + $totalPrestations);
+                            $appointment = $invoice->appointment;
+                            $labRequest = $invoice->labRequest;
+                            $walkIn = $invoice->walkInConsultation;
+                            
+                            $serviceName = 'Service général';
+                            if ($appointment && $appointment->service) $serviceName = $appointment->service->name;
+                            elseif ($labRequest && $labRequest->service) $serviceName = 'LABORATOIRE : ' . $labRequest->service->name;
+                            elseif ($walkIn && $walkIn->service) $serviceName = 'SANS RDV : ' . $walkIn->service->name;
                         @endphp
                         <tr class="hover:bg-blue-50/30 transition-colors group">
                             {{-- 1. N° Facture --}}
@@ -43,7 +47,7 @@
                                 {{ $invoice->invoice_number }}
                             </td>
 
-                            {{-- 2. Date (AJOUTÉ POUR L'ALIGNEMENT) --}}
+                            {{-- 2. Date --}}
                             <td class="px-6 py-5 text-sm text-gray-600 font-bold">
                                 {{ $invoice->invoice_date->format('d/m/Y') }}
                             </td>
@@ -56,16 +60,18 @@
                             {{-- 4. Services --}}
                             <td class="px-6 py-5">
                                 <div class="text-xs font-bold text-gray-500">
-                                    {{ $appointment ? ($appointment->service->name ?? 'Service général') : 'Service général' }}
+                                    {{ $serviceName }}
                                     @if($appointment && $appointment->prestations->count() > 0)
                                         <span class="text-blue-500 block">+ {{ $appointment->prestations->count() }} prestation(s)</span>
+                                    @elseif($labRequest)
+                                        <span class="text-purple-500 block">Examen : {{ $labRequest->test_name }}</span>
                                     @endif
                                 </div>
                             </td>
 
                             {{-- 5. Montant --}}
                             <td class="px-6 py-5 font-black text-gray-900 text-sm">
-                                {{ number_format($montantTotal, 0, ',', ' ') }} F
+                                {{ number_format($invoice->total, 0, ',', ' ') }} F
                             </td>
 
                             {{-- 6. Statut --}}

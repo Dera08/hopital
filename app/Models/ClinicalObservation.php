@@ -10,9 +10,8 @@ class ClinicalObservation extends Model
     use BelongsToHospital;
 
     protected $fillable = [
-        'hospital_id','patient_id', 'user_id', 'temperature', 'pulse', 
-        'weight', 'height', 'observation_datetime', 'value','is_critical'
-        // J'ai supprimé 'notes' ici pour éviter l'erreur SQL
+        'hospital_id','patient_id', 'user_id', 'type', 'temperature', 'pulse', 
+        'weight', 'height', 'observation_datetime', 'value','is_critical', 'is_visible_to_patient', 'notes'
     ];
 
     protected $casts = [

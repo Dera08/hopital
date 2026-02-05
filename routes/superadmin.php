@@ -39,14 +39,24 @@ Route::middleware(['auth:superadmin', 'superadmin.verified'])->prefix('admin-sys
         ->name('superadmin.dashboard');
 
     // Gestion des Hôpitaux
+    Route::get('/hospitals', [SuperAdminController::class, 'allHospitalsList'])
+        ->name('superadmin.hospitals.index');
     Route::post('/hospitals/store', [SuperAdminController::class, 'storeHospital'])
         ->name('superadmin.hospitals.store');
     Route::get('/hospitals/{hospital}/details', [SuperAdminController::class, 'getHospitalDetails'])
         ->name('superadmin.hospitals.details');
     Route::post('/hospitals/{hospital}/toggle-status', [SuperAdminController::class, 'toggleHospitalStatus'])
         ->name('superadmin.hospitals.toggle-status');
+    Route::post('/hospitals/{hospital}/initialize-cashiers', [SuperAdminController::class, 'initializeDefaultCashiers'])
+        ->name('superadmin.hospitals.initialize-cashiers');
 
     // Gestion des Spécialistes
+    Route::get('/specialists', [SuperAdminController::class, 'allSpecialistsList'])
+        ->name('superadmin.specialists.index');
+    Route::get('/specialists/{id}/details', [SuperAdminController::class, 'getSpecialistDetails'])
+        ->name('superadmin.specialists.details');
+    Route::get('/specialists/{id}/profile', [SuperAdminController::class, 'showSpecialistProfile'])
+        ->name('superadmin.specialists.show');
     Route::post('/specialists/{id}/validate', [SuperAdminController::class, 'validateSpecialist'])
         ->name('superadmin.specialists.validate');
 

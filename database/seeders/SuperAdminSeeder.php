@@ -15,7 +15,7 @@ class SuperAdminSeeder extends Seeder
             [
                 'name' => 'Super Admin',
                 'password' => Hash::make('supeAD'),
-                'access_code' => 'ADMIN2026',
+                'access_code' => 'ADMIN202',
                 'wallet_balance' => 0,
             ]
         );

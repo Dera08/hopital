@@ -20,11 +20,14 @@ class RedirectByRole
             // Définir les dashboards par rôle
             $roleDashboards = [
                 'internal_doctor' => 'doctor.internal.dashboard',
+                'doctor' => 'medecin.dashboard',
                 'external_doctor' => 'doctor.external.dashboard',
+                'medecin' => 'external.doctor.external.dashboard',
                 'admin' => 'dashboard',
                 'administrative' => 'dashboard',
                 'nurse' => 'dashboard',
                 'receptionist' => 'dashboard',
+                'doctor_lab' => 'lab.biologist.dashboard',
             ];
             
             // Définir les routes autorisées par rôle
@@ -43,6 +46,18 @@ class RedirectByRole
                 ],
                 'external_doctor' => [
                     'doctor.external.*',
+                    'external.*',
+                    'patients.show',
+                    'patients.medical-file',
+                    'appointments.*',
+                    'prescriptions.*',
+                    'medical-records.*',
+                    'profile.*',
+                    'logout'
+                ],
+                'medecin' => [
+                    'doctor.external.*',
+                    'external.*',
                     'patients.show',
                     'patients.medical-file',
                     'appointments.*',
@@ -95,6 +110,13 @@ class RedirectByRole
                     'appointments.*',
                     'admissions.index',
                     'admissions.show',
+                    'profile.*',
+                    'logout'
+                ],
+                'doctor_lab' => [
+                    'lab.biologist.*',
+                    'lab.history',
+                    'lab.requests.validate',
                     'profile.*',
                     'logout'
                 ],

@@ -1,0 +1,623 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Appointment;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
+use App\Models\Patient;
+use App\Models\WalkInConsultation;
+use App\Models\Service;
+use App\Models\Prestation;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class CashierController extends Controller
+{
+    /**
+     * Tableau de bord avec statistiques
+     */
+    public function dashboard()
+    {
+        $hospitalId = auth()->user()->hospital_id;
+
+        $pendingPayments = Appointment::where('hospital_id', $hospitalId)
+            ->whereNotIn('status', ['paid', 'cancelled'])
+            ->with(['patient', 'service', 'doctor', 'prestations'])
+            ->orderBy('appointment_datetime')
+            ->get();
+
+        $recentPayments = Appointment::where('hospital_id', $hospitalId)
+            ->where('status', 'paid')
+            ->where('updated_at', '>=', now()->subDays(30))
+            ->with(['patient', 'service', 'doctor'])
+            ->orderBy('updated_at', 'desc')
+            ->take(10)
+            ->get();
+
+        $todayStats = [
+            'pending' => $pendingPayments->count(),
+            'paid_today' => Appointment::where('hospital_id', $hospitalId)
+                ->where('status', 'paid')
+                ->whereDate('updated_at', today())
+                ->count(),
+            'total_revenue_today' => Appointment::where('hospital_id', $hospitalId)
+                ->where('status', 'paid')
+                ->whereDate('updated_at', today())
+                ->with('prestations')
+                ->get()
+                ->sum(fn($apt) => $apt->prestations->sum('pivot.total'))
+        ];
+
+        return view('cashier.dashboard', compact('pendingPayments', 'recentPayments', 'todayStats'));
+    }
+
+    /**
+     * Liste de tous les rendez-vous pour la caisse
+     */
+    public function appointments()
+    {
+        $hospitalId = auth()->user()->hospital_id;
+        $appointments = Appointment::where('hospital_id', $hospitalId)
+            ->with(['patient', 'service', 'prestations', 'invoices'])
+            ->orderBy('appointment_datetime', 'desc')
+            ->get();
+
+        return view('cashier.appointments', compact('appointments'));
+    }
+
+    /**
+     * Validation du paiement et génération de facture
+     */
+    public function validatePayment(Request $request, Appointment $appointment)
+{
+    if ($appointment->hospital_id !== auth()->user()->hospital_id) {
+        abort(403);
+    }
+
+    DB::beginTransaction();
+    try {
+        // 1. Récupérer l'admission associée au rendez-vous
+        // Important pour la relation 'admission_id' que nous avons ajoutée
+        $admission = \App\Models\Admission::where('appointment_id', $appointment->id)->first();
+
+        // 2. Calcul des montants
+        $servicePrice = $appointment->service->price ?? 0; // Prix de la consultation
+        $prestations = $appointment->prestations;
+        $subtotalPrestations = $prestations->sum('pivot.total');
+        
+        $subtotal = $servicePrice + $subtotalPrestations;
+        $tax = $subtotal * 0.18; // TVA 18%
+        $total = $subtotal + $tax;
+
+        // 3. Créer la facture avec le lien vers l'admission
+        $invoice = Invoice::create([
+            'hospital_id' => $appointment->hospital_id,
+            'invoice_number' => 'INV-' . now()->format('ymd') . '-' . str_pad($appointment->id, 4, '0', STR_PAD_LEFT),
+            'patient_id' => $appointment->patient_id,
+            'appointment_id' => $appointment->id,
+            'admission_id' => $admission ? $admission->id : null, // Liaison corrigée
+            'invoice_date' => now(),
+            'subtotal' => $subtotal,
+            'tax' => $tax,
+            'total' => $total,
+            'status' => 'paid',
+            'payment_method' => $request->payment_method ?? 'Espèces',
+            'paid_at' => now(),
+        ]);
+
+        // 4. Créer l'item pour le service principal (Consultation)
+        if ($servicePrice > 0) {
+            InvoiceItem::create([
+                'hospital_id' => $appointment->hospital_id,
+                'invoice_id' => $invoice->id,
+                'description' => "Consultation : " . $appointment->service->name,
+                'quantity' => 1,
+                'unit_price' => $servicePrice,
+                'total' => $servicePrice,
+            ]);
+        }
+
+        // 5. Créer les items pour les prestations additionnelles
+        foreach ($prestations as $prestation) {
+            InvoiceItem::create([
+                'hospital_id' => $appointment->hospital_id,
+                'invoice_id' => $invoice->id,
+                'description' => $prestation->name,
+                'quantity' => $prestation->pivot->quantity,
+                'unit_price' => $prestation->pivot->unit_price,
+                'total' => $prestation->pivot->total,
+            ]);
+        }
+
+        // 6. Mettre à jour le statut du rendez-vous
+        $appointment->update(['status' => 'paid']);
+
+        DB::commit();
+        return back()->with('success', 'Paiement encaissé et facture générée !');
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return back()->withErrors(['error' => 'Échec de la transaction : ' . $e->getMessage()]);
+    }
+}
+
+    /**
+     * Pages restantes pour vos routes
+     */
+  public function payments()
+{
+    $hospitalId = auth()->user()->hospital_id;
+
+    $payments = Invoice::where('hospital_id', $hospitalId)
+        ->where('status', 'paid')
+        ->with([
+            'patient',
+            'appointment.service',
+            'appointment.prestations',
+            'admission'
+        ])
+        ->latest()
+        ->paginate(15);
+
+    return view('cashier.payments', compact('payments'));
+}
+
+    public function invoices() {
+        $invoices = Invoice::where('hospital_id', auth()->user()->hospital_id)
+            ->with(['patient', 'admission.appointment.service', 'admission.appointment.prestations'])
+            ->latest()
+            ->paginate(15);
+        return view('cashier.invoices', compact('invoices'));
+    }
+
+    public function patients() {
+        $patients = Patient::where('hospital_id', auth()->user()->hospital_id)
+            ->latest()
+            ->paginate(20);
+        return view('cashier.patients', compact('patients'));
+    }
+
+    public function settings() {
+        return view('cashier.settings');
+    }
+
+    public function rejectPayment(Appointment $appointment) {
+        $appointment->update(['status' => 'cancelled']);
+        return back()->with('success', 'Rendez-vous annulé.');
+    }
+
+    public function showInvoice(Invoice $invoice) {
+        if ($invoice->hospital_id !== auth()->user()->hospital_id) {
+            abort(403);
+        }
+
+        $invoice->load(['patient', 'items', 'appointment.service', 'appointment.prestations', 'admission']);
+
+        return view('cashier.invoice_show', compact('invoice'));
+    }
+
+    public function printInvoice(Invoice $invoice) {
+        if ($invoice->hospital_id !== auth()->user()->hospital_id) {
+            abort(403);
+        }
+
+        $invoice->load(['patient', 'items', 'appointment.service', 'appointment.prestations', 'admission', 'hospital']);
+
+        return view('cashier.invoices.print', compact('invoice'));
+    }
+
+    public function downloadInvoice(Invoice $invoice) {
+        if ($invoice->hospital_id !== auth()->user()->hospital_id) {
+            abort(403);
+        }
+
+        $invoice->load(['patient', 'items', 'appointment.service', 'appointment.prestations', 'admission', 'hospital']);
+
+        // Calcul du total si non stocké en base
+        $appointment = $invoice->appointment;
+        $total = ($appointment?->service?->price ?? 0) + ($appointment ? $appointment->prestations->sum('pivot.total') : 0);
+
+        // For now, return HTML view instead of PDF due to package installation issues
+        return response()->view('cashier.invoices.pdf', compact('invoice', 'total'))
+            ->header('Content-Type', 'text/html')
+            ->header('Content-Disposition', 'attachment; filename="Facture_'.$invoice->invoice_number.'.html"');
+    }
+
+    /**
+     * Liste des consultations sans rendez-vous
+     */
+    public function walkInConsultations()
+    {
+        $hospitalId = auth()->user()->hospital_id;
+
+        $walkInConsultations = WalkInConsultation::where('hospital_id', $hospitalId)
+            ->with(['patient', 'service', 'prestations'])
+            ->orderBy('created_at', 'desc')
+            ->paginate(15);
+
+        $services = Service::where('hospital_id', $hospitalId)->get();
+        // Enrich services with consultation price from prestations
+        foreach($services as $service) {
+            $service->consultation_price = $this->getConsultationPrice($service);
+        }
+        
+        $prestations = Prestation::where('hospital_id', $hospitalId)->get();
+
+        return view('cashier.walk-in.index', compact('walkInConsultations', 'services', 'prestations'));
+    }
+
+    /**
+     * Helper to get the price of a consultation for a given service
+     * Based on convention "Consultation [Name]"
+     */
+    private function getConsultationPrice($service)
+    {
+        // Try to find a prestation named "Consultation {Service Name}" or similar
+        // Example: "Consultation Cardiologie" for service "Cardiologie"
+        $prestation = Prestation::where('hospital_id', $service->hospital_id)
+            ->where('service_id', $service->id) // Assuming link exists
+            ->where(function($q) use ($service) {
+                $q->where('name', 'like', '%Consultation%')
+                  ->orWhere('name', 'like', '%' . $service->name . '%');
+            })
+            ->first();
+            
+        // If not found via service_id, try just by name match (loose coupling fallback)
+        if (!$prestation) {
+            $prestation = Prestation::where('hospital_id', $service->hospital_id)
+                ->where('name', 'like', '%Consultation ' . $service->name . '%')
+                ->first();
+        }
+
+        return $prestation ? $prestation->price : 0;
+    }
+
+    /**
+     * Créer une nouvelle consultation sans rendez-vous
+     */
+    public function createWalkInConsultation(Request $request)
+    {
+        $request->validate([
+            'patient_name' => 'required|string|max:255',
+            'patient_phone' => 'required|string|max:20',
+            'patient_email' => 'nullable|email',
+            'service_id' => 'required|exists:services,id',
+            'consultation_prestation_id' => 'required|exists:prestations,id',
+            'payment_mode' => 'required|in:cash,mobile_money',
+            'mobile_operator' => 'required_if:payment_mode,mobile_money|in:mtn,orange,moov',
+            'mobile_number' => 'required_if:payment_mode,mobile_money|string',
+            'prestation_ids' => 'nullable|array',
+            'prestation_ids.*' => 'exists:prestations,id',
+        ]);
+
+        $hospitalId = auth()->user()->hospital_id;
+
+        // Créer ou récupérer le patient
+        $patient = Patient::firstOrCreate(
+            ['phone' => $request->patient_phone, 'hospital_id' => $hospitalId],
+            [
+                'name' => $request->patient_name,
+                'first_name' => $request->patient_name, // Utiliser le même nom pour l'instant
+                'email' => $request->patient_email,
+                'hospital_id' => $hospitalId,
+                'ipu' => 'IPU-' . strtoupper(uniqid()), // Générer un IPU unique
+                'dob' => now()->subYears(30), // Date de naissance par défaut (30 ans)
+                'gender' => 'Other', // Genre par défaut
+                'address' => 'Non renseigné',
+            ]
+        );
+
+        // Créer la consultation sans rendez-vous
+        $consultation = WalkInConsultation::create([
+            'hospital_id' => $hospitalId,
+            'patient_id' => $patient->id,
+            'service_id' => $request->service_id,
+            'status' => 'pending_payment',
+            'consultation_datetime' => now(),
+        ]);
+
+        // Attacher l'acte principal de consultation
+        $mainPrestation = Prestation::find($request->consultation_prestation_id);
+        if ($mainPrestation) {
+            $consultation->prestations()->attach($mainPrestation->id, [
+                'quantity' => 1,
+                'unit_price' => $mainPrestation->price,
+                'total' => $mainPrestation->price,
+            ]);
+        }
+
+        // Attacher les prestations additionnelles si fournies
+        if ($request->prestation_ids) {
+            foreach ($request->prestation_ids as $prestationId) {
+                // Éviter de rajouter deux fois la même si l'utilisateur l'a cochée par erreur
+                if ($prestationId == $request->consultation_prestation_id) continue;
+
+                $prestation = Prestation::find($prestationId);
+                if ($prestation) {
+                    $consultation->prestations()->attach($prestationId, [
+                        'quantity' => 1,
+                        'unit_price' => $prestation->price,
+                        'total' => $prestation->price,
+                    ]);
+                }
+            }
+        }
+
+        // Gérer le paiement selon le mode choisi
+        if ($request->payment_mode === 'mobile_money') {
+            return $this->initiateMobileMoneyPayment($request, $consultation, $patient);
+        }
+
+        // Pour paiement en espèces, redirection normale
+        return redirect()->route('cashier.walk-in.index')->with('success', 'Consultation créée. Veuillez procéder au paiement en espèces.');
+    }
+
+    /**
+     * Récupérer les détails d'une consultation pour le modal de paiement
+     */
+    public function getWalkInDetails(WalkInConsultation $consultation)
+    {
+        if ($consultation->hospital_id !== auth()->user()->hospital_id) {
+            abort(403);
+        }
+
+        $consultation->load(['patient', 'service', 'prestations']);
+        
+        // Since we attached the main consultation as a prestation in the store method,
+        // we just need to sum all prestations.
+        $total = $consultation->prestations->sum('pivot.total');
+        $tax = $total * 0.18; // Est. TVA
+        $grandTotal = $total + $tax;
+
+        return view('cashier.walk-in.details', compact('consultation', 'total', 'tax', 'grandTotal'));
+    }
+
+    /**
+     * Valider le paiement d'une consultation sans rendez-vous
+     */
+    public function validateWalkInPayment(Request $request, WalkInConsultation $consultation)
+    {
+        if ($consultation->hospital_id !== auth()->user()->hospital_id) {
+            abort(403);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Récupérer les prestations (incluant la consultation principale) et calculer le total
+            $prestations = $consultation->prestations;
+            $subtotal = $prestations->sum('pivot.total');
+
+            // 1. Créer un RDV "virtuel" pour que le patient apparaisse chez l'infirmier
+            $appointment = \App\Models\Appointment::create([
+                'hospital_id' => $consultation->hospital_id,
+                'patient_id' => $consultation->patient_id,
+                'service_id' => $consultation->service_id,
+                'doctor_id' => null, // Pas encore de médecin assigné
+                'appointment_datetime' => now(),
+                'status' => 'paid', // Directement payé => visible infirmerie
+                'reason' => 'Consultation Sans RDV',
+                'type' => 'walk-in'
+            ]);
+
+            // Dupliquer les prestations vers le RDV
+            foreach ($prestations as $prestation) {
+               $appointment->prestations()->attach($prestation->id, [
+                   'quantity' => $prestation->pivot->quantity,
+                   'unit_price' => $prestation->pivot->unit_price,
+                   'total' => $prestation->pivot->total,
+               ]);
+            }
+
+            // Calcul des taxes
+            $tax = $subtotal * 0.18; // TVA 18%
+            $total = $subtotal + $tax;
+
+            // Créer la facture
+            $invoice = Invoice::create([
+                'hospital_id' => $consultation->hospital_id,
+                'invoice_number' => 'WALK-' . now()->format('ymd') . '-' . str_pad($consultation->id, 4, '0', STR_PAD_LEFT),
+                'patient_id' => $consultation->patient_id,
+                'appointment_id' => $appointment->id, // Important pour le lien
+                'walk_in_consultation_id' => $consultation->id,
+                'invoice_date' => now(),
+                'subtotal' => $subtotal,
+                'tax' => $tax,
+                'total' => $total,
+                'status' => 'paid',
+                'payment_method' => $request->payment_method ?? 'Espèces',
+                'paid_at' => now(),
+            ]);
+
+            // Note: On ne crée plus d'item séparé pour "ServicePrice" car la consultation
+            // est maintenant incluse dans la boucle des prestations ci-dessous.
+
+            // Créer les items pour les prestations
+            foreach ($prestations as $prestation) {
+                InvoiceItem::create([
+                    'hospital_id' => $consultation->hospital_id,
+                    'invoice_id' => $invoice->id,
+                    'description' => $prestation->name,
+                    'quantity' => $prestation->pivot->quantity,
+                    'unit_price' => $prestation->pivot->unit_price,
+                    'total' => $prestation->pivot->total,
+                ]);
+            }
+
+            // Mettre à jour le statut de la consultation
+            $consultation->update(['status' => 'paid']);
+
+            DB::commit();
+            return back()->with('success', 'Paiement validé, facture générée et dossier envoyé à l\'infirmier !');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => 'Échec de la transaction : ' . $e->getMessage()]);
+        }
+    }
+}
+        / * *  
+           *   I n i t i a t e   m o b i l e   m o n e y   p a y m e n t  
+           * /  
+         p r i v a t e   f u n c t i o n   i n i t i a t e M o b i l e M o n e y P a y m e n t ( R e q u e s t   $ r e q u e s t ,   W a l k I n C o n s u l t a t i o n   $ c o n s u l t a t i o n ,   $ p a t i e n t )  
+         {  
+                 $ m o b i l e M o n e y S e r v i c e   =   n e w   \ A p p \ S e r v i c e s \ M o b i l e M o n e y S e r v i c e ( ) ;  
+                  
+                 / /   C a l c u l e r   l e   m o n t a n t   t o t a l  
+                 $ t o t a l   =   $ c o n s u l t a t i o n - > p r e s t a t i o n s - > s u m ( ' p i v o t . t o t a l ' ) ;  
+                 $ t a x   =   $ t o t a l   *   0 . 1 8 ;  
+                 $ g r a n d T o t a l   =   $ t o t a l   +   $ t a x ;  
+                  
+                 / /   P r � � p a r e r   l e s   d o n n � � e s   d e   p a i e m e n t  
+                 $ p a y m e n t D a t a   =   [  
+                         ' a m o u n t '   = >   ( i n t )   $ g r a n d T o t a l ,  
+                         ' c u s t o m e r _ n a m e '   = >   $ p a t i e n t - > n a m e ,  
+                         ' c u s t o m e r _ s u r n a m e '   = >   $ p a t i e n t - > f i r s t _ n a m e   ? ?   $ p a t i e n t - > n a m e ,  
+                         ' c u s t o m e r _ p h o n e '   = >   $ r e q u e s t - > m o b i l e _ n u m b e r ,  
+                         ' c u s t o m e r _ e m a i l '   = >   $ p a t i e n t - > e m a i l ,  
+                         ' c u s t o m e r _ a d d r e s s '   = >   $ p a t i e n t - > a d d r e s s   ? ?   ' N / A ' ,  
+                         ' c u s t o m e r _ c i t y '   = >   $ p a t i e n t - > c i t y   ? ?   ' N / A ' ,  
+                         ' o p e r a t o r '   = >   $ r e q u e s t - > m o b i l e _ o p e r a t o r ,  
+                         ' d e s c r i p t i o n '   = >   ' C o n s u l t a t i o n   S a n s   R D V   -   '   .   $ c o n s u l t a t i o n - > s e r v i c e - > n a m e ,  
+                         ' c o n s u l t a t i o n _ i d '   = >   $ c o n s u l t a t i o n - > i d ,  
+                         ' h o s p i t a l _ i d '   = >   $ c o n s u l t a t i o n - > h o s p i t a l _ i d ,  
+                         ' i t e m s '   = >   $ c o n s u l t a t i o n - > p r e s t a t i o n s - > m a p ( f u n c t i o n ( $ p )   {  
+                                 r e t u r n   [  
+                                         ' n a m e '   = >   $ p - > n a m e ,  
+                                         ' q u a n t i t y '   = >   $ p - > p i v o t - > q u a n t i t y ,  
+                                         ' u n i t _ p r i c e '   = >   $ p - > p i v o t - > u n i t _ p r i c e ,  
+                                         ' t o t a l '   = >   $ p - > p i v o t - > t o t a l  
+                                 ] ;  
+                         } ) - > t o A r r a y ( )  
+                 ] ;  
+                  
+                 / /   I n i t i e r   l e   p a i e m e n t  
+                 $ p a y m e n t R e s u l t   =   $ m o b i l e M o n e y S e r v i c e - > i n i t i a t e P a y m e n t ( $ p a y m e n t D a t a ) ;  
+                  
+                 i f   ( $ p a y m e n t R e s u l t [ ' s u c c e s s ' ] )   {  
+                         / /   S t o c k e r   l e s   i n f o r m a t i o n s   d e   t r a n s a c t i o n  
+                         $ c o n s u l t a t i o n - > u p d a t e ( [  
+                                 ' p a y m e n t _ t r a n s a c t i o n _ i d '   = >   $ p a y m e n t R e s u l t [ ' t r a n s a c t i o n _ i d ' ] ,  
+                                 ' p a y m e n t _ m e t h o d '   = >   ' m o b i l e _ m o n e y ' ,  
+                                 ' p a y m e n t _ o p e r a t o r '   = >   $ r e q u e s t - > m o b i l e _ o p e r a t o r ,  
+                         ] ) ;  
+                          
+                         / /   R e d i r i g e r   v e r s   l a   p a g e   d e   p a i e m e n t  
+                         r e t u r n   r e d i r e c t ( $ p a y m e n t R e s u l t [ ' p a y m e n t _ u r l ' ] )  
+                                 - > w i t h ( ' i n f o ' ,   ' R e d i r e c t i o n   v e r s   l a   p a g e   d e   p a i e m e n t . . . ' ) ;  
+                 }  
+                  
+                 / /   E n   c a s   d ' e r r e u r ,   s u p p r i m e r   l a   c o n s u l t a t i o n   e t   a f f i c h e r   l ' e r r e u r  
+                 $ c o n s u l t a t i o n - > d e l e t e ( ) ;  
+                 r e t u r n   r e d i r e c t ( ) - > r o u t e ( ' c a s h i e r . w a l k - i n . i n d e x ' )  
+                         - > w i t h E r r o r s ( [ ' e r r o r '   = >   $ p a y m e n t R e s u l t [ ' m e s s a g e ' ]   ? ?   ' E r r e u r   l o r s   d e   l \ ' i n i t i a l i s a t i o n   d u   p a i e m e n t ' ] ) ;  
+         }  
+  
+         / * *  
+           *   H a n d l e   m o b i l e   m o n e y   w e b h o o k   c a l l b a c k  
+           * /  
+         p u b l i c   f u n c t i o n   h a n d l e M o b i l e M o n e y W e b h o o k ( R e q u e s t   $ r e q u e s t )  
+         {  
+                 $ m o b i l e M o n e y S e r v i c e   =   n e w   \ A p p \ S e r v i c e s \ M o b i l e M o n e y S e r v i c e ( ) ;  
+                  
+                 / /   V � � r i f i e r   l a   s i g n a t u r e   d u   w e b h o o k  
+                 i f   ( ! $ m o b i l e M o n e y S e r v i c e - > v e r i f y W e b h o o k S i g n a t u r e ( $ r e q u e s t - > a l l ( ) ) )   {  
+                         r e t u r n   r e s p o n s e ( ) - > j s o n ( [ ' s t a t u s '   = >   ' i n v a l i d _ s i g n a t u r e ' ] ,   4 0 3 ) ;  
+                 }  
+                  
+                 $ t r a n s a c t i o n I d   =   $ r e q u e s t - > i n p u t ( ' c p m _ t r a n s _ i d ' ) ;  
+                 $ s t a t u s   =   $ r e q u e s t - > i n p u t ( ' c p m _ r e s u l t ' ) ;  
+                 $ m e t a d a t a   =   j s o n _ d e c o d e ( $ r e q u e s t - > i n p u t ( ' m e t a d a t a ' ) ,   t r u e ) ;  
+                  
+                 i f   ( $ s t a t u s   = =   ' 0 0 ' )   {   / /   P a i e m e n t   r � � u s s i  
+                         $ c o n s u l t a t i o n I d   =   $ m e t a d a t a [ ' c o n s u l t a t i o n _ i d ' ]   ? ?   n u l l ;  
+                          
+                         i f   ( $ c o n s u l t a t i o n I d )   {  
+                                 $ c o n s u l t a t i o n   =   W a l k I n C o n s u l t a t i o n : : f i n d ( $ c o n s u l t a t i o n I d ) ;  
+                                  
+                                 i f   ( $ c o n s u l t a t i o n   & &   $ c o n s u l t a t i o n - > s t a t u s   = = =   ' p e n d i n g _ p a y m e n t ' )   {  
+                                         / /   V a l i d e r   a u t o m a t i q u e m e n t   l e   p a i e m e n t  
+                                         $ t h i s - > p r o c e s s S u c c e s s f u l P a y m e n t ( $ c o n s u l t a t i o n ,   $ r e q u e s t ) ;  
+                                 }  
+                         }  
+                 }  
+                  
+                 r e t u r n   r e s p o n s e ( ) - > j s o n ( [ ' s t a t u s '   = >   ' r e c e i v e d ' ] ,   2 0 0 ) ;  
+         }  
+  
+         / * *  
+           *   P r o c e s s   s u c c e s s f u l   m o b i l e   m o n e y   p a y m e n t  
+           * /  
+         p r i v a t e   f u n c t i o n   p r o c e s s S u c c e s s f u l P a y m e n t ( W a l k I n C o n s u l t a t i o n   $ c o n s u l t a t i o n ,   R e q u e s t   $ r e q u e s t )  
+         {  
+                 D B : : b e g i n T r a n s a c t i o n ( ) ;  
+                 t r y   {  
+                         $ p r e s t a t i o n s   =   $ c o n s u l t a t i o n - > p r e s t a t i o n s ;  
+                         $ s u b t o t a l   =   $ p r e s t a t i o n s - > s u m ( ' p i v o t . t o t a l ' ) ;  
+  
+                         / /   C r � � e r   u n   R D V   " v i r t u e l "   p o u r   q u e   l e   p a t i e n t   a p p a r a i s s e   c h e z   l ' i n f i r m i e r  
+                         $ a p p o i n t m e n t   =   \ A p p \ M o d e l s \ A p p o i n t m e n t : : c r e a t e ( [  
+                                 ' h o s p i t a l _ i d '   = >   $ c o n s u l t a t i o n - > h o s p i t a l _ i d ,  
+                                 ' p a t i e n t _ i d '   = >   $ c o n s u l t a t i o n - > p a t i e n t _ i d ,  
+                                 ' s e r v i c e _ i d '   = >   $ c o n s u l t a t i o n - > s e r v i c e _ i d ,  
+                                 ' d o c t o r _ i d '   = >   n u l l ,  
+                                 ' a p p o i n t m e n t _ d a t e t i m e '   = >   n o w ( ) ,  
+                                 ' s t a t u s '   = >   ' p a i d ' ,  
+                                 ' r e a s o n '   = >   ' C o n s u l t a t i o n   S a n s   R D V ' ,  
+                                 ' t y p e '   = >   ' w a l k - i n '  
+                         ] ) ;  
+  
+                         / /   D u p l i q u e r   l e s   p r e s t a t i o n s   v e r s   l e   R D V  
+                         f o r e a c h   ( $ p r e s t a t i o n s   a s   $ p r e s t a t i o n )   {  
+                               $ a p p o i n t m e n t - > p r e s t a t i o n s ( ) - > a t t a c h ( $ p r e s t a t i o n - > i d ,   [  
+                                       ' q u a n t i t y '   = >   $ p r e s t a t i o n - > p i v o t - > q u a n t i t y ,  
+                                       ' u n i t _ p r i c e '   = >   $ p r e s t a t i o n - > p i v o t - > u n i t _ p r i c e ,  
+                                       ' t o t a l '   = >   $ p r e s t a t i o n - > p i v o t - > t o t a l ,  
+                               ] ) ;  
+                         }  
+  
+                         / /   C a l c u l   d e s   t a x e s  
+                         $ t a x   =   $ s u b t o t a l   *   0 . 1 8 ;  
+                         $ t o t a l   =   $ s u b t o t a l   +   $ t a x ;  
+  
+                         / /   C r � � e r   l a   f a c t u r e  
+                         $ i n v o i c e   =   I n v o i c e : : c r e a t e ( [  
+                                 ' h o s p i t a l _ i d '   = >   $ c o n s u l t a t i o n - > h o s p i t a l _ i d ,  
+                                 ' i n v o i c e _ n u m b e r '   = >   ' W A L K - '   .   n o w ( ) - > f o r m a t ( ' y m d ' )   .   ' - '   .   s t r _ p a d ( $ c o n s u l t a t i o n - > i d ,   4 ,   ' 0 ' ,   S T R _ P A D _ L E F T ) ,  
+                                 ' p a t i e n t _ i d '   = >   $ c o n s u l t a t i o n - > p a t i e n t _ i d ,  
+                                 ' a p p o i n t m e n t _ i d '   = >   $ a p p o i n t m e n t - > i d ,  
+                                 ' w a l k _ i n _ c o n s u l t a t i o n _ i d '   = >   $ c o n s u l t a t i o n - > i d ,  
+                                 ' i n v o i c e _ d a t e '   = >   n o w ( ) ,  
+                                 ' s u b t o t a l '   = >   $ s u b t o t a l ,  
+                                 ' t a x '   = >   $ t a x ,  
+                                 ' t o t a l '   = >   $ t o t a l ,  
+                                 ' s t a t u s '   = >   ' p a i d ' ,  
+                                 ' p a y m e n t _ m e t h o d '   = >   ' M o b i l e   M o n e y ' ,  
+                                 ' p a i d _ a t '   = >   n o w ( ) ,  
+                         ] ) ;  
+  
+                         / /   C r � � e r   l e s   i t e m s   p o u r   l e s   p r e s t a t i o n s  
+                         f o r e a c h   ( $ p r e s t a t i o n s   a s   $ p r e s t a t i o n )   {  
+                                 I n v o i c e I t e m : : c r e a t e ( [  
+                                         ' h o s p i t a l _ i d '   = >   $ c o n s u l t a t i o n - > h o s p i t a l _ i d ,  
+                                         ' i n v o i c e _ i d '   = >   $ i n v o i c e - > i d ,  
+                                         ' d e s c r i p t i o n '   = >   $ p r e s t a t i o n - > n a m e ,  
+                                         ' q u a n t i t y '   = >   $ p r e s t a t i o n - > p i v o t - > q u a n t i t y ,  
+                                         ' u n i t _ p r i c e '   = >   $ p r e s t a t i o n - > p i v o t - > u n i t _ p r i c e ,  
+                                         ' t o t a l '   = >   $ p r e s t a t i o n - > p i v o t - > t o t a l ,  
+                                 ] ) ;  
+                         }  
+  
+                         / /   M e t t r e   � �   j o u r   l e   s t a t u t   d e   l a   c o n s u l t a t i o n  
+                         $ c o n s u l t a t i o n - > u p d a t e ( [ ' s t a t u s '   = >   ' p a i d ' ] ) ;  
+  
+                         D B : : c o m m i t ( ) ;  
+                         \ L o g : : i n f o ( ' M o b i l e   M o n e y   P a y m e n t   P r o c e s s e d   S u c c e s s f u l l y ' ,   [ ' c o n s u l t a t i o n _ i d '   = >   $ c o n s u l t a t i o n - > i d ] ) ;  
+                          
+                 }   c a t c h   ( \ E x c e p t i o n   $ e )   {  
+                         D B : : r o l l B a c k ( ) ;  
+                         \ L o g : : e r r o r ( ' M o b i l e   M o n e y   P a y m e n t   P r o c e s s i n g   E r r o r ' ,   [  
+                                 ' c o n s u l t a t i o n _ i d '   = >   $ c o n s u l t a t i o n - > i d ,  
+                                 ' e r r o r '   = >   $ e - > g e t M e s s a g e ( )  
+                         ] ) ;  
+                 }  
+         }  
+ 

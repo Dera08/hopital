@@ -13,7 +13,7 @@ class MedicalDocument extends Model
        'hospital_id', 'patient_id', 'uploaded_by_id', 'document_type', 'title',
         'file_path', 'file_name', 'mime_type', 'file_size',
         'is_validated', 'validated_by_id', 'validated_at',
-        'version', 'parent_document_id'
+        'version', 'parent_document_id', 'is_visible_to_patient'
     ];
 
     protected $casts = [

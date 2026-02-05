@@ -9,12 +9,13 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Service;
+use App\Models\DoctorAvailability;
 
 class User extends Authenticatable
 {
     use HasFactory, Notifiable;
     use SoftDeletes;
-     use BelongsToHospital;
+    use BelongsToHospital;
 
     protected $fillable = [
         'hospital_id',
@@ -62,18 +63,18 @@ class User extends Authenticatable
     // Vérifie si l'utilisateur est un médecin EXTERNE
     public function isExternalDoctor(): bool
     {
-        return $this->role === 'external_doctor';
+        return $this->role === 'medecin_externe'; // Correction probable du rôle pour medecin_externe
     }
 
     // Mise à jour : Vérifie si l'utilisateur est un DOCTEUR (Interne ou Externe)
     public function isDoctor(): bool
     {
-        // Inclure le rôle 'doctor' générique pour la compatibilité
-        return $this->role === 'doctor' || $this->isInternalDoctor() || $this->isExternalDoctor();
+        // On exclut le doctor_lab ici car il a son propre dashboard et sidebar
+        if ($this->role === 'doctor_lab') return false;
+        
+        return $this->role === 'doctor' || $this->role === 'internal_doctor' || $this->role === 'medecin_externe';
     }
     
-    // --- AUTRES MÉTHODES (inchangées) ---
-
     public function isAdministrative(): bool
     {
         return $this->role === 'administrative' || $this->role === 'admin';
@@ -95,7 +96,12 @@ class User extends Authenticatable
     }
 
     public function hasRole($role): bool
- {
-    return $this->role === $role;
- }
+    {
+        return $this->role === $role;
+    }
+
+    public function availabilities()
+    {
+        return $this->hasMany(DoctorAvailability::class, 'doctor_id');
+    }
 }

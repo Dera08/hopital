@@ -46,31 +46,8 @@ class PortalController extends Controller
 
     public function bookAppointment(Request $request)
     {
-        $validated = $request->validate([
-            'doctor_id' => 'required|exists:users,id',
-            'service_id' => 'required|exists:services,id',
-            'appointment_datetime' => 'required|date|after:now',
-            'reason' => 'nullable|string|max:500',
-        ]);
-
-        $patient = auth()->guard('patients')->user();
-
-        try {
-            Appointment::create([
-                'patient_id' => $patient->id,
-                'doctor_id' => $validated['doctor_id'],
-                'service_id' => $validated['service_id'],
-                'appointment_datetime' => $validated['appointment_datetime'],
-                'duration' => 30,
-                'status' => 'scheduled',
-                'type' => 'consultation',
-                'reason' => $validated['reason'],
-            ]);
-
-            return back()->with('success', 'Rendez-vous pris avec succès.');
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Erreur lors de la prise de rendez-vous.']);
-        }
+        return redirect()->route('patient.book-appointment')
+            ->with('info', 'Veuillez utiliser le nouveau formulaire de réservation.');
     }
 
     public function cancelAppointment(Appointment $appointment)

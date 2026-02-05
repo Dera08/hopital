@@ -34,7 +34,7 @@ class PatientAuthTest extends TestCase
     /** @test */
     public function patient_can_login_with_email()
     {
-        $response = $this->post(route('patient.login'), [
+        $response = $this->post(route('login.process'), [
             'identifier' => 'test.patient@example.com',
             'password' => 'password',
         ]);
@@ -46,7 +46,7 @@ class PatientAuthTest extends TestCase
     /** @test */
     public function patient_can_login_with_ipu()
     {
-        $response = $this->post(route('patient.login'), [
+        $response = $this->post(route('login.process'), [
             'identifier' => 'PAT20240001',
             'password' => 'password',
         ]);
@@ -74,13 +74,13 @@ class PatientAuthTest extends TestCase
     {
         $response = $this->get(route('patient.dashboard'));
 
-        $response->assertRedirect(route('patient.login'));
+        $response->assertRedirect(route('login'));
     }
 
     /** @test */
     public function patient_login_validates_required_fields()
     {
-        $response = $this->post(route('patient.login'), []);
+        $response = $this->post(route('login.process'), []);
 
         $response->assertRedirect();
         $response->assertSessionHasErrors(['identifier', 'password']);
@@ -89,7 +89,7 @@ class PatientAuthTest extends TestCase
     /** @test */
     public function patient_login_fails_with_wrong_credentials()
     {
-        $response = $this->post(route('patient.login'), [
+        $response = $this->post(route('login.process'), [
             'identifier' => 'test.patient@example.com',
             'password' => 'wrongpassword',
         ]);

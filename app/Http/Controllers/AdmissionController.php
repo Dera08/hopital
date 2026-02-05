@@ -60,13 +60,29 @@ class AdmissionController extends Controller
     $patient = $patientId ? Patient::findOrFail($patientId) : null;
     $user = auth()->user();
 
-    // Chambres disponibles
-    $rooms = Room::where('status', 'available')->get();
+    // Chambres disponibles filtrées par service
+    $rooms = Room::where('status', 'available')
+        ->when(!$user->isAdmin() && $user->service_id, function($q) use ($user) {
+            return $q->where('service_id', $user->service_id);
+        })
+        ->get();
 
-    // --- AJOUT : RÉCUPÉRER LES LITS DISPONIBLES ---
-    $availableBeds = \App\Models\Bed::where('is_available', true)->get();
+    // LITS DISPONIBLES filtrés par service
+    $availableBeds = \App\Models\Bed::where('is_available', true)
+        ->when(!$user->isAdmin() && $user->service_id, function($q) use ($user) {
+            // Filtrer les lits dont la chambre appartient au service de l'utilisateur
+            return $q->whereHas('room', function($rq) use ($user) {
+                $rq->where('service_id', $user->service_id);
+            });
+        })
+        ->with('room.service') // Charger la relation pour affichage
+        ->get();
 
-    $doctors = User::where('role', 'doctor')->get();
+    $doctors = User::where('role', 'doctor')
+        ->when(!$user->isAdmin() && $user->service_id, function($q) use ($user) {
+            return $q->where('service_id', $user->service_id);
+        })
+        ->get();
 
     // Ajoutez 'availableBeds' au compact
     return view('admissions.create', compact('patient', 'rooms', 'doctors', 'availableBeds'));

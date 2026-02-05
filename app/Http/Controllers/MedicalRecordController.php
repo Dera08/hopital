@@ -17,13 +17,26 @@ class MedicalRecordController extends Controller
      */
     public function index()
     {
-        $records = PatientVital::where(function($query) {
-            $query->where('status', 'active')
-                  ->orWhereNull('status'); // Pour inclure les anciens dossiers sans statut
+        $user = auth()->user();
+        $query = PatientVital::where(function($q) {
+            $q->whereIn('status', ['active', 'consulting'])
+              ->orWhereNull('status');
         })
-        ->where('status', '!=', 'admitted') // Exclure les patients admis
-        ->orderBy('created_at', 'desc')
-        ->get();
+        ->where('status', '!=', 'admitted')
+        ->where('hospital_id', $user->hospital_id);
+
+        // Si c'est un médecin, il ne voit que ses dossiers ou ceux de son service non assignés
+        if ($user->role === 'doctor' || $user->role === 'internal_doctor') {
+            $query->where(function($q) use ($user) {
+                $q->where('doctor_id', $user->id)
+                  ->orWhere(function($sub) use ($user) {
+                      $sub->whereNull('doctor_id')
+                          ->where('service_id', $user->service_id);
+                  });
+            });
+        }
+
+        $records = $query->with(['doctor', 'patient', 'service'])->orderBy('created_at', 'desc')->get();
 
         return view('medical_records.index', compact('records'));
     }
@@ -34,25 +47,54 @@ class MedicalRecordController extends Controller
     public function archivesIndex()
     {
         $records = PatientVital::where('status', 'archived')
+            ->with(['doctor', 'patient', 'service'])
             ->orderBy('created_at', 'desc')
             ->get();
 
         return view('medical_records.index', compact('records'))->with('is_archive', true);
     }
 
-   public function show($id)
-{
-    $record = PatientVital::findOrFail($id);
+    public function show($id)
+    {
+        $record = PatientVital::with(['patient', 'service'])->findOrFail($id);
+
+        // UPDATE STATUS: Si le statut est "active" (En attente), on le passe en "consulting" (En cours)
+        // cela permet à l'infirmière de voir le badge Bleu
+        if ($record->status === 'active') {
+            $record->update(['status' => 'consulting']);
+        }
     
     $patientVitals = PatientVital::where('patient_ipu', $record->patient_ipu)
         ->orderBy('created_at', 'desc')
         ->get();
 
     // --- AJOUTEZ CES DEUX LIGNES ---
-    $rooms = Room::where('is_active', true)->get();
-    $availableBeds = Bed::with('room')->where('is_available', true)->whereNotNull('room_id')->whereHas('room')->get();
-    // -------------------------------
+    // FILTRE PAR SERVICE : On ne montre que les chambres du service du médecin/infirmier ou du dossier
+    $user = auth()->user();
+    // Pour les médecins de labo (qui n'ont pas de lits), on utilise le service du dossier
+    if (in_array($user->role, ['doctor_lab', 'lab_technician', 'admin', 'superadmin'])) {
+        $targetServiceId = $record->service_id;
+    } else {
+        $targetServiceId = $user->service_id ?? $record->service_id;
+    }
+    
+    $rooms = Room::where('is_active', true)
+        ->when($targetServiceId, function($q) use ($targetServiceId) {
+            $q->where('service_id', $targetServiceId);
+        })
+        ->get();
 
+    $availableBeds = Bed::with('room')
+        ->where('is_available', true)
+        ->whereNotNull('room_id')
+        ->whereHas('room', function($q) use ($targetServiceId) {
+            $q->where('is_active', true);
+            if ($targetServiceId) {
+                $q->where('service_id', $targetServiceId);
+            }
+        })
+        ->get();
+    // -------------------------------
     // Ajoutez 'rooms' et 'availableBeds' au compact
     return view('medical_records.show', compact('record', 'patientVitals', 'rooms', 'availableBeds'));
 }
@@ -78,26 +120,21 @@ public function update(Request $request, $id)
         'temperature'    => 'required|numeric', // numeric pour éviter le texte
         'blood_pressure' => 'required|string',
         'pulse'          => 'required|numeric',
+        'weight'         => 'nullable|numeric',
+        'height'         => 'nullable|numeric',
         'reason'         => 'required|string',
         'observations'   => 'nullable|string',
         'ordonnance'     => 'nullable|string',
         'is_visible_to_patient' => 'boolean',
+        'custom_vitals'  => 'nullable|array',
     ]);
 
     // ÉTAPE CRUCIALE : On écrase les anciennes données (le fameux 37°C)
     // par ce que l'infirmier a tapé ($validatedData)
     $record->update($validatedData);
 
-    // Pour que le carnet de santé ne soit plus vide, on synchronise avec la table Patient
-    $patient = Patient::where('ipu', $record->patient_ipu)->first();
-    if ($patient) {
-        $patient->vitals()->create([
-            'temperature' => $request->temperature,
-            'pulse' => $request->pulse,
-            'blood_pressure' => $request->blood_pressure,
-            'patient_ipu' => $record->patient_ipu
-        ]);
-    }
+    // REMOVED: Auto-creation of duplicate PatientVital was creating unwanted records
+    // The $record itself is already a PatientVital entry, no need to duplicate it
 
     return redirect()->back()->with('success', 'Les constantes réelles ont été transmises !');
 }
@@ -113,6 +150,14 @@ public function update(Request $request, $id)
         PatientVital::where('patient_name', $record->patient_name)
              ->where('patient_ipu', $record->patient_ipu)
             ->update(['status' => 'archived']);
+
+        // Mettre à jour le rendez-vous lié en statut 'completed' pour afficher "Terminé" au patient
+        \App\Models\Appointment::whereHas('patient', function($query) use ($record) {
+            $query->where('ipu', $record->patient_ipu);
+        })
+        ->where('status', 'confirmed')
+        ->where('appointment_datetime', '>=', now()->subDays(1))
+        ->update(['status' => 'completed']);
 
         return redirect()->route('medical_records.index')
             ->with('success', 'Le dossier a été clôturé et transféré aux archives.');
@@ -135,7 +180,19 @@ public function update(Request $request, $id)
         }
 
         // ... (Ton code de création de patient reste identique) ...
-        $patient = Patient::where('ipu', $record->patient_ipu)->first();
+        // ... (Ton code de création de patient reste identique) ...
+        // CORRECTIF : Recherche globale pour éviter "Duplicate entry"
+        $patient = Patient::withoutGlobalScopes()->where('ipu', $record->patient_ipu)->first();
+        
+        if ($patient) {
+            // Si le patient est supprimé (soft delete), on le restaure
+            if (method_exists($patient, 'trashed') && $patient->trashed()) {
+                $patient->restore();
+            }
+            // IMPORTANT : Si le patient existe dans un AUTRE hôpital, on pourrait le réaffecter ici
+            // Mais pour l'instant, on s'assure juste de ne pas planter.
+        }
+
         if (!$patient) {
             $nameParts = explode(' ', $record->patient_name, 2);
             $firstName = $nameParts[0] ?? '';
@@ -238,15 +295,40 @@ public function update(Request $request, $id)
     }
 
     /**
-     * Partager le dossier médical au patient
+     * Partager TOUT le dossier au patient
      */
-    public function share($id)
+    public function share(Request $request, $id)
     {
-        $record = PatientVital::findOrFail($id);
+        // On cherche le patient soit par son ID directement, soit via une fiche PatientVital
+        $patient = Patient::find($id);
+        
+        if (!$patient) {
+            $record = PatientVital::find($id);
+            if ($record) {
+                $patient = Patient::where('ipu', $record->patient_ipu)->first();
+            }
+        }
 
-        $record->update(['is_visible_to_patient' => true]);
+        if (!$patient) {
+            return redirect()->back()->with('error', 'Patient non trouvé.');
+        }
 
-        return redirect()->back()->with('success', 'Le dossier a été partagé au patient.');
+        // 1. Partager les constantes / fiches PatientVital
+        PatientVital::where('patient_ipu', $patient->ipu)->update(['is_visible_to_patient' => true]);
+
+        // 2. Partager les ClinicalObservations
+        \App\Models\ClinicalObservation::where('patient_id', $patient->id)->update(['is_visible_to_patient' => true]);
+
+        // 3. Partager les Prescriptions (Ordonnances)
+        \App\Models\Prescription::where('patient_id', $patient->id)->update(['is_visible_to_patient' => true]);
+
+        // 4. Partager les LabRequests
+        \App\Models\LabRequest::where('patient_ipu', $patient->ipu)->update(['is_visible_to_patient' => true]);
+
+        // 5. Partager les Documents
+        \App\Models\MedicalDocument::where('patient_id', $patient->id)->update(['is_visible_to_patient' => true]);
+
+        return redirect()->back()->with('success', 'Le dossier complet a été partagé au patient avec succès.');
     }
 
     /**
@@ -259,7 +341,7 @@ public function update(Request $request, $id)
         // Supprimer le dossier
         $record->delete();
 
-        return redirect()->route('medical_records.index')
+        return redirect()->back()
             ->with('success', 'Le dossier médical a été supprimé avec succès.');
     }
     

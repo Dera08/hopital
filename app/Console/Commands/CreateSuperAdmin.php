@@ -30,13 +30,13 @@ class CreateSuperAdmin extends Command
             [
                 'name' => 'Super Admin',
                 'password' => \Illuminate\Support\Facades\Hash::make('supeAD'),
-                'access_code' => 'ADMIN2026',
+                'access_code' => 'ADMIN202',
             ]
         );
 
         $this->info('Super Admin created successfully.');
         $this->info('Email: admin@system.com');
         $this->info('Password: supeAD');
-        $this->info('Access Code: ADMIN2026');
+        $this->info('Access Code: ADMIN202');
     }
 }

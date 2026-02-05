@@ -81,29 +81,126 @@
                             <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Heure</th>
                             <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Médecin / Service</th>
                             <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Observation / Diagnostic</th>
+                            <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Admission</th>
                             <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Détails</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
+                        @php
+                            $displayedAdmissions = [];
+                        @endphp
+
                         @forelse($records as $record)
-                            <tr class="hover:bg-blue-50/20 transition-colors">
+                            @php
+                                $admission = $record->related_admission;
+                                
+                                // Si le dossier est lié à une admission
+                                if ($admission) {
+                                    // LOGIQUE D'AFFICHAGE DU GROUPE :
+                                    // 1. Si le dossier est ANTÉRIEUR à l'admission (ex: Consultations pré-admission), on l'affiche SÉPARÉMENT
+                                    if ($record->created_at < $admission->admission_date) {
+                                        $isGroupRow = false;
+                                        $displayDate = $record->created_at;
+                                        $displayDoctor = $record->doctor ?? $admission->doctor;
+                                        // On ne l'ajoute PAS à displayedAdmissions pour ne pas bloquer l'affichage du vrai groupe plus tard
+                                    } 
+                                    // 2. Si le dossier fait partie de l'hospitalisation (Date >= Admission)
+                                    else {
+                                        // Si on a déjà affiché le groupe pour cette admission, on cache ce dossier
+                                        if (in_array($admission->id, $displayedAdmissions)) {
+                                            continue;
+                                        }
+                                        
+                                        // Sinon, on affiche le GROUPE "Episode Hospitalisation"
+                                        $displayedAdmissions[] = $admission->id;
+                                        $displayDate = $admission->admission_date;
+                                        $displayDoctor = $admission->doctor;
+                                        $isGroupRow = true;
+                                    }
+                                } else {
+                                    // Dossier standard (Consultation simple)
+                                    $displayDate = $record->created_at;
+                                    $displayDoctor = $record->doctor;
+                                    $isGroupRow = false;
+                                }
+                            @endphp
+
+                            <tr class="hover:bg-blue-50/20 transition-colors {{ $isGroupRow ? 'bg-orange-50/30' : '' }}">
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm font-bold text-gray-900">{{ $record->created_at->format('d M Y') }}</div>
-                                    <div class="text-xs text-gray-400">{{ $record->created_at->format('H:i') }}</div>
+                                    <div class="text-sm font-bold text-gray-900">{{ $displayDate->format('d M Y') }}</div>
+                                    <div class="text-xs text-gray-400">{{ $displayDate->format('H:i') }}</div>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <div class="text-sm font-semibold text-gray-900">{{ $record->doctor->name ?? 'Médecin' }}</div>
-                                    <div class="text-xs text-blue-600 font-medium">{{ $record->service->name ?? 'Service Général' }}</div>
+                                    <div class="flex items-center space-x-2">
+                                        <div>
+                                            <div class="text-sm font-semibold text-gray-900">
+                                                {{ $displayDoctor?->name ?? 'Médecin non assigné' }}
+                                            </div>
+                                            
+                                            <!-- Badge Hospitalisation -->
+                                            @if($isGroupRow)
+                                                <div class="mt-2 flex flex-col items-start space-y-1">
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700">
+                                                        <i class="fas fa-procedures mr-2"></i> Episode Hospitalisation
+                                                    </span>
+                                                    <div class="text-[10px] text-gray-500 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">
+                                                        <div><span class="font-semibold">Arrivée:</span> {{ $admission->admission_date->format('d/m/Y H:i') }}</div>
+                                                        @if($admission->discharge_date)
+                                                            <div><span class="font-semibold">Sortie:</span> {{ $admission->discharge_date->format('d/m/Y H:i') }}</div>
+                                                        @else
+                                                            <div class="text-emerald-600 font-medium">En cours</div>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @else
+                                                <div class="text-xs text-blue-600 font-medium">{{ $record->service->name ?? 'Service Général' }}</div>
+                                            @endif
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <p class="text-sm text-gray-600 italic">
-                                        {{ Str::limit($record->observation ?? $record->diagnosis, 60) }}
-                                    </p>
+                                    @if($isGroupRow)
+                                        <p class="text-sm text-gray-600 italic">
+                                            <i class="fas fa-layer-group text-gray-400 mr-1"></i>
+                                            Voir le détail complet de l'épisode de soins (Hospitalisation)
+                                        </p>
+                                    @else
+                                        <p class="text-sm text-gray-600 italic">
+                                            {{ Str::limit($record->observations ?? $record->reason, 60) }}
+                                        </p>
+                                    @endif
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    @if($admission)
+                                        <div class="flex flex-col">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-700 w-max mb-1">
+                                                <i class="fas fa-procedures mr-1"></i> Admis
+                                            </span>
+                                            <div class="text-[10px] text-gray-500">
+                                                <div class="flex items-center"><i class="fas fa-sign-in-alt mr-1 opacity-50"></i> {{ $admission->admission_date->format('d/m/Y H:i') }}</div>
+                                                @if($admission->discharge_date)
+                                                    <div class="flex items-center text-gray-400"><i class="fas fa-sign-out-alt mr-1 opacity-50"></i> {{ $admission->discharge_date->format('d/m/Y H:i') }}</div>
+                                                @else
+                                                    <div class="flex items-center text-emerald-600 font-bold"><i class="fas fa-clock mr-1 opacity-50"></i> En cours</div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @else
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 w-max">
+                                            <i class="fas fa-minus mr-1 opacity-30"></i> Non admis
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="px-6 py-4 text-right">
-                                    <button class="h-8 w-8 bg-gray-50 rounded-full text-gray-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                                        <i class="fas fa-chevron-right text-xs"></i>
-                                    </button>
+                                    @if($isGroupRow)
+                                        <a href="{{ route('patient.medical-history.admission.show', $admission->id) }}" class="inline-flex items-center px-3 py-1 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm">
+                                            Détails complets <i class="fas fa-chevron-right ml-2 text-xs"></i>
+                                        </a>
+                                    @else
+                                        <a href="{{ route('patient.medical-history.show', $record->id) }}" class="inline-flex items-center justify-center h-8 w-8 bg-gray-50 rounded-full text-gray-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                            <i class="fas fa-chevron-right text-xs"></i>
+                                        </a>
+                                    @endif
                                 </td>
                             </tr>
                         @empty

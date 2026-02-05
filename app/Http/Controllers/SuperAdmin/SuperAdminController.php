@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers\SuperAdmin;
 
-use Illuminate\Http\Request;
-use App\Http\Controllers\Controller;
+use App\Models\Service;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
 use App\Models\Hospital;
 use App\Models\User;
 use App\Models\SuperAdmin;
@@ -14,9 +18,6 @@ use App\Models\CommissionBracket;
 use App\Models\MedecinExterne;
 use App\Models\SpecialistWallet;
 use App\Models\TransactionLog;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class SuperAdminController extends Controller
 {
@@ -73,7 +74,7 @@ class SuperAdminController extends Controller
         $request->merge(['access_code' => trim($request->access_code)]);
 
         $request->validate([
-            'access_code' => 'required|string|size:8'
+            'access_code' => 'required|string|min:8|max:10'
         ]);
 
         // Get the authenticated superadmin
@@ -114,23 +115,39 @@ class SuperAdminController extends Controller
     public function dashboard()
     {
         // On récupère tous les hôpitaux pour les afficher sur le dashboard
-        $hospitals = Hospital::withCount('users')->get();
+        $hospitals = Hospital::with(['subscriptionPlan'])->withCount('users')->get();
+
+        // Récupérer tous les spécialistes
+        $allSpecialists = MedecinExterne::orderBy('created_at', 'desc')->get();
+        $pendingSpecialists = $allSpecialists->where('statut', 'inactif');
+
+        // Récupérer la règle de commission active
+        $activeCommissionRate = CommissionRate::where('is_active', true)->first();
+        $activationFee = $activeCommissionRate ? (float) $activeCommissionRate->activation_fee : 4000;
+        
+        // Calculer une commission moyenne indicative (moyenne simple des tranches)
+        $avgCommission = 0;
+        if ($activeCommissionRate && $activeCommissionRate->brackets->count() > 0) {
+            $avgCommission = (float) $activeCommissionRate->brackets->avg('percentage');
+        } else {
+            $avgCommission = 15;
+        }
 
         // Statistiques dynamiques pour le dashboard
         $stats = [
             'active_hospitals' => $hospitals->where('is_active', true)->count(),
             'total_users' => $hospitals->sum('users_count'),
             'total_patients' => \App\Models\Patient::count(),
-            'pending_validations' => 0, // À remplacer par une vraie logique quand disponible
-            'total_saas_revenue' => 0, // TODO: Calculate actual SaaS revenue
-            'total_commissions' => 0, // TODO: Calculate actual commissions
-            'monthly_saas_revenue' => 0, // TODO: Calculate monthly SaaS revenue
-            'monthly_commissions' => 0, // TODO: Calculate monthly commissions
-            'activation_fee' => 4000, // Default activation fee
-            'average_commission' => 15, // Default average commission percentage
+            'pending_validations' => $pendingSpecialists->count(),
+            'total_saas_revenue' => (float) TransactionLog::sum('net_income'),
+            'total_commissions' => (float) TransactionLog::where('description', 'like', '%commission%')->sum('net_income'),
+            'monthly_saas_revenue' => (float) TransactionLog::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('net_income'),
+            'monthly_commissions' => (float) TransactionLog::where('description', 'like', '%commission%')->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('net_income'),
+            'activation_fee' => $activationFee, 
+            'average_commission' => $avgCommission,
         ];
 
-        return view('superadmin.dashboard', compact('hospitals', 'stats'));
+        return view('superadmin.dashboard', compact('hospitals', 'stats', 'allSpecialists', 'pendingSpecialists'));
     }
 
     // === HOSPITAL MANAGEMENT ===
@@ -165,12 +182,91 @@ class SuperAdminController extends Controller
                     'hospital_id' => $hospital->id,
                     'is_active' => true
                 ]);
+
+                // 3. Création des 3 Caisses Réglementaires par défaut
+                $services = [
+                    ['name' => 'Accueil / Admissions', 'code' => 'ACC'],
+                    ['name' => 'Pharmacie / Laboratoire', 'code' => 'PHL'],
+                    ['name' => 'Urgences / Nuit', 'code' => 'URG'],
+                ];
+
+                foreach ($services as $index => $sData) {
+                    $service = Service::create([
+                        'hospital_id' => $hospital->id,
+                        'name' => $sData['name'],
+                        'code' => $sData['code'] . $hospital->id . rand(10, 99),
+                        'description' => 'Service ' . $sData['name'],
+                        'type' => 'support'
+                    ]);
+
+                    User::create([
+                        'name' => 'Caissier ' . ($index + 1) . ' (' . $sData['name'] . ')',
+                        'email' => 'cashier' . ($index + 1) . '.' . $hospital->id . '@hopit.sis',
+                        'password' => Hash::make('password123'),
+                        'role' => 'cashier',
+                        'hospital_id' => $hospital->id,
+                        'service_id' => $service->id,
+                        'is_active' => true
+                    ]);
+                }
             });
 
-            return redirect()->back()->with('success', 'L\'hôpital et son administrateur ont été créés avec succès.');
+            return redirect()->back()->with('success', 'L\'hôpital, son administrateur et ses 3 caisses ont été créés avec succès.');
 
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Erreur lors de la création : ' . $e->getMessage());
+        }
+    }
+
+    public function initializeDefaultCashiers($hospitalId)
+    {
+        try {
+            $hospital = Hospital::findOrFail($hospitalId);
+            
+            DB::transaction(function () use ($hospital) {
+                $services = [
+                    ['name' => 'Accueil / Admissions', 'code' => 'ACC'],
+                    ['name' => 'Pharmacie / Laboratoire', 'code' => 'PHL'],
+                    ['name' => 'Urgences / Nuit', 'code' => 'URG'],
+                ];
+
+                foreach ($services as $index => $sData) {
+                    $service = Service::where('hospital_id', $hospital->id)
+                                      ->where('name', $sData['name'])
+                                      ->first();
+                    
+                    if (!$service) {
+                        $service = Service::create([
+                            'hospital_id' => $hospital->id,
+                            'name' => $sData['name'],
+                            'code' => $sData['code'] . $hospital->id . rand(10, 99),
+                            'description' => 'Service ' . $sData['name'],
+                            'type' => 'support'
+                        ]);
+                    }
+
+                    $cashierExists = User::where('hospital_id', $hospital->id)
+                                         ->where('service_id', $service->id)
+                                         ->where('role', 'cashier')
+                                         ->exists();
+                    
+                    if (!$cashierExists) {
+                        User::create([
+                            'name' => 'Caissier ' . ($index + 1) . ' (' . $sData['name'] . ')',
+                            'email' => 'cashier' . ($index + 1) . '.' . Str::random(4) . '@hopital-' . $hospital->id . '.com',
+                            'password' => Hash::make('password123'),
+                            'role' => 'cashier',
+                            'hospital_id' => $hospital->id,
+                            'service_id' => $service->id,
+                            'is_active' => true
+                        ]);
+                    }
+                }
+            });
+
+            return response()->json(['success' => true, 'message' => 'Les 3 caisses réglementaires ont été initialisées avec succès.']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 
@@ -181,7 +277,8 @@ class SuperAdminController extends Controller
                 'users.service',
                 'services.users',
                 'services.prestations',
-                'prestations.service'
+                'prestations.service',
+                'patients'
             ])->findOrFail($hospitalId);
 
             // Calculer les statistiques
@@ -189,6 +286,8 @@ class SuperAdminController extends Controller
                 'total_users' => $hospital->users->count(),
                 'total_services' => $hospital->services->count(),
                 'total_prestations' => $hospital->prestations->count(),
+                'total_patients' => $hospital->patients->count(),
+                'total_cashiers' => $hospital->users->where('role', 'cashier')->count(),
                 'active_users' => $hospital->users->where('is_active', true)->count(),
             ];
 
@@ -229,6 +328,47 @@ class SuperAdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erreur lors de la mise à jour du statut'
+            ], 500);
+        }
+    }
+
+    public function validateSpecialist(Request $request, $id)
+    {
+        $request->validate([
+            'action' => 'required|in:approve,reject'
+        ]);
+
+        try {
+            $specialist = MedecinExterne::findOrFail($id);
+
+            if ($request->action === 'approve') {
+                $specialist->statut = 'actif';
+                $specialist->save();
+
+                // Initialize wallet if it doesn't exist
+                SpecialistWallet::firstOrCreate(
+                    ['specialist_id' => $specialist->id],
+                    ['balance' => 0, 'is_activated' => false, 'is_blocked' => false]
+                );
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Spécialiste validé avec succès.'
+                ]);
+            } else {
+                // For rejection, we might want to delete or keep as inactive
+                // For now, let's just keep it inactive or maybe delete it
+                // $specialist->delete(); 
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Spécialiste rejeté.'
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la validation: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -387,15 +527,25 @@ class SuperAdminController extends Controller
 
     private function calculateCommissionPercentage($amount)
     {
-        if ($amount >= 50000) {
-            return 35;
-        } elseif ($amount >= 26000) {
-            return 20;
-        } elseif ($amount >= 5000) {
-            return 10;
-        } else {
+        $activeRate = CommissionRate::where('is_active', true)->first();
+        
+        if (!$activeRate) {
+            // Fallback to old hardcoded logic if no dynamic rule exists
+            if ($amount >= 50000) return 35;
+            if ($amount >= 26000) return 20;
+            if ($amount >= 5000) return 10;
             return 0;
         }
+
+        $bracket = $activeRate->brackets()
+            ->where('min_price', '<=', $amount)
+            ->where(function ($query) use ($amount) {
+                $query->whereNull('max_price')
+                      ->orWhere('max_price', '>=', $amount);
+            })
+            ->first();
+
+        return $bracket ? (float) $bracket->percentage : 0;
     }
 
     // === SPECIALIST ACTIVATION ===
@@ -722,7 +872,7 @@ class SuperAdminController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la mise à jour: ' . $e->getMessage()
+            'message' => 'Erreur lors de la mise à jour: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -738,21 +888,120 @@ class SuperAdminController extends Controller
         ]);
     }
 
+    public function allSpecialistsList()
+    {
+        $specialists = MedecinExterne::with(['wallet'])->orderBy('created_at', 'desc')->paginate(20);
+        return view('superadmin.specialists.index', compact('specialists'));
+    }
+
+    public function allHospitalsList()
+    {
+        $hospitals = Hospital::with(['subscriptionPlan'])->orderBy('created_at', 'desc')->paginate(20);
+        return view('superadmin.hospitals.index', compact('hospitals'));
+    }
+
+    public function getSpecialistDetails($id)
+    {
+        try {
+            $specialist = MedecinExterne::with(['wallet'])->findOrFail($id);
+            $transactions = TransactionLog::where('source_type', 'specialist')
+                ->where('source_id', $id)
+                ->orderBy('created_at', 'desc')
+                ->take(10)
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'specialist' => [
+                    'id' => $specialist->id,
+                    'name' => $specialist->prenom . ' ' . $specialist->nom,
+                    'email' => $specialist->email,
+                    'specialite' => $specialist->specialite,
+                    'status' => strtoupper($specialist->statut),
+                    'wallet' => $specialist->wallet ? [
+                        'balance' => (float)$specialist->wallet->balance,
+                        'is_activated' => (bool)$specialist->wallet->is_activated,
+                        'is_blocked' => (bool)$specialist->wallet->is_blocked,
+                        'activated_at' => $specialist->wallet->activated_at ? $specialist->wallet->activated_at->format('d/m/Y H:i') : null
+                    ] : null
+                ],
+                'transactions' => $transactions
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function showSpecialistProfile($id)
+    {
+        $specialist = MedecinExterne::with(['wallet', 'prestations'])->findOrFail($id);
+        
+        // Récupérer les transactions financières
+        $transactions = TransactionLog::where('source_type', 'specialist')
+            ->where('source_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
+        // Pour les RDV, on va chercher dans la table TransactionLog ceux qui sont liés à des actes
+        // car la relation Appointment/MedecinExterne n'est peut-être pas encore directe
+        $consultations = TransactionLog::where('source_type', 'specialist')
+            ->where('source_id', $id)
+            ->where('description', 'like', '%CONSULTATION%')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Statistiques
+        $stats = [
+            'total_earned' => $transactions->sum('net_income'), // Pour le système
+            'specialist_balance' => $specialist->wallet ? $specialist->wallet->balance : 0,
+            'prestations_count' => $specialist->prestations->count(),
+            'consultations_count' => $consultations->count(),
+        ];
+
+        return view('superadmin.specialists.show', compact('specialist', 'transactions', 'consultations', 'stats'));
+    }
+
     // === FINANCIAL MONITORING ===
     
     public function getFinancialMonitoring()
     {
-        return response()->json([
-            'stats' => [
-                'total_saas_revenue' => 0,
-                'total_commissions' => 0,
-                'monthly_saas_revenue' => 0,
-                'monthly_commissions' => 0,
-            ],
-            'recent_transactions' => [],
-            'hospitals' => [],
-            'specialists' => [],
-        ]);
+        try {
+            $transactions = TransactionLog::latest()->take(10)->get();
+            
+            $stats = [
+                'total_revenue' => (float) TransactionLog::sum('net_income'),
+                'activation_fees' => (float) TransactionLog::where('description', 'like', 'FRAIS_ACTIVATION%')->sum('net_income'),
+                'specialist_commissions' => (float) TransactionLog::where('description', 'like', '%commission%')->sum('net_income'),
+                'hospital_subscriptions' => (float) TransactionLog::where('source_type', 'hospital')->where('description', 'like', '%abonnement%')->sum('net_income'),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'stats' => $stats,
+                'recent_transactions' => $transactions,
+                'hospitals' => Hospital::with('subscriptionPlan')->where('is_active', true)->take(10)->get(),
+                'specialists' => MedecinExterne::with('wallet')->take(5)->get()->map(function($spec) {
+                    return [
+                        'id' => $spec->id,
+                        'specialist_id' => $spec->id, // Pour la compatibilité JS
+                        'name' => ($spec->nom ?? '') . ' ' . ($spec->prenom ?? ''),
+                        'balance' => $spec->wallet ? (float) $spec->wallet->balance : 0,
+                        'status' => strtoupper($spec->statut ?? 'INACTIF'),
+                        'is_paid' => $spec->wallet && $spec->wallet->is_activated,
+                        'paid_at' => $spec->wallet && $spec->wallet->activated_at ? $spec->wallet->activated_at->format('d/m/Y') : null
+                    ];
+                }),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Financial Monitoring Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function getInvoices()

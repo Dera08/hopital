@@ -206,8 +206,8 @@
                                 <div class="border border-gray-200 rounded-lg p-4 hover:border-green-500 transition">
                                     <div class="flex items-center justify-between">
                                         <div class="flex-1">
-                                            <p class="font-medium text-gray-900">{{ $record->record_datetime->format('d/m/Y') }}</p>
-                                            <p class="text-sm text-gray-600 mt-1">{{ Str::limit($record->diagnosis, 60) }}</p>
+                                            <p class="font-medium text-gray-900">{{ $record->created_at->format('d/m/Y') }}</p>
+                                            <p class="text-sm text-gray-600 mt-1">{{ Str::limit($record->observations ?? $record->reason, 60) }}</p>
                                         </div>
                                         <i class="fas fa-chevron-right text-gray-400"></i>
                                     </div>

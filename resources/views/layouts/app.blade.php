@@ -8,6 +8,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <style>
         [x-cloak] { display: none !important; }
@@ -63,7 +64,7 @@
     
     @stack('styles')
 </head>
-<body class="bg-gray-100 font-sans antialiased">
+<body class="bg-gray-100 font-sans antialiased" x-data="{ sidebarOpen: true, mobileMenuOpen: false }">
 
     <!-- Top Header -->
     <header class="bg-white shadow-sm border-b border-gray-200 z-30">
@@ -82,33 +83,58 @@
 
             <div class="flex items-center space-x-4">
                 @if(Auth::check() && Auth::user())
-                <!-- Notifications -->
+                <!-- Dynamic Notifications -->
+                @php
+                    $notifUser = Auth::user();
+                    $notifQuery = \App\Models\PatientVital::where('hospital_id', $notifUser->hospital_id)
+                        ->whereIn('status', ['active', 'consulting']);
+                    
+                    if ($notifUser->role === 'doctor' || $notifUser->role === 'internal_doctor') {
+                        $notifQuery->where('doctor_id', $notifUser->id);
+                    }
+                    
+                    $notifCount = $notifQuery->count();
+                    $recentNotifs = $notifQuery->latest()->limit(5)->get();
+                @endphp
                 <div x-data="{ open: false }" class="relative">
                     <button @click="open = !open" class="p-2 rounded-lg hover:bg-gray-100 transition focus:outline-none relative">
                         <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
                         </svg>
-                        <span class="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">3</span>
+                        @if($notifCount > 0)
+                            <span class="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold animate-pulse">{{ $notifCount }}</span>
+                        @endif
                     </button>
 
-                    <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                        <div class="p-4 border-b border-gray-200">
-                            <h3 class="text-sm font-semibold text-gray-800">Notifications</h3>
+                    <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-80 bg-white rounded-[1.5rem] shadow-2xl border border-gray-100 z-50 overflow-hidden">
+                        <div class="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
+                            <h3 class="text-xs font-black text-gray-900 uppercase tracking-widest">Dossiers Reçus</h3>
+                            <span class="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px] font-black">{{ $notifCount }}</span>
                         </div>
-                        <div class="max-h-64 overflow-y-auto">
-                            <div class="p-4 border-b border-gray-100 hover:bg-gray-50">
-                                <p class="text-sm text-gray-800">Nouveau patient admis</p>
-                                <p class="text-xs text-gray-500">Il y a 5 minutes</p>
-                            </div>
-                            <div class="p-4 border-b border-gray-100 hover:bg-gray-50">
-                                <p class="text-sm text-gray-800">Rendez-vous confirmé</p>
-                                <p class="text-xs text-gray-500">Il y a 12 minutes</p>
-                            </div>
-                            <div class="p-4 hover:bg-gray-50">
-                                <p class="text-sm text-gray-800">Rapport mensuel disponible</p>
-                                <p class="text-xs text-gray-500">Il y a 1 heure</p>
-                            </div>
+                        <div class="max-h-80 overflow-y-auto">
+                            @forelse($recentNotifs as $notif)
+                                <a href="{{ route('medical-records.show', $notif->id) }}" class="block p-4 border-b border-gray-50 hover:bg-blue-50/50 transition-colors">
+                                    <div class="flex gap-3">
+                                        <div class="h-10 w-10 flex-shrink-0 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 font-black text-xs">
+                                            {{ substr($notif->patient_name, 0, 1) }}
+                                        </div>
+                                        <div>
+                                            <p class="text-sm font-bold text-gray-900 leading-tight">{{ $notif->patient_name }}</p>
+                                            <p class="text-[10px] text-gray-400 font-bold uppercase mt-1">{{ $notif->urgency }} · {{ $notif->created_at->diffForHumans() }}</p>
+                                        </div>
+                                    </div>
+                                </a>
+                            @empty
+                                <div class="p-8 text-center">
+                                    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Aucune alerte</p>
+                                </div>
+                            @endforelse
                         </div>
+                        @if($notifCount > 0)
+                            <a href="{{ route('medical_records.index') }}" class="block p-3 text-center bg-gray-50 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:bg-blue-50 transition-colors">
+                                Voir tous les dossiers
+                            </a>
+                        @endif
                     </div>
                 </div>
 
@@ -144,7 +170,7 @@
         </div>
     </header>
 
-    <div x-data="{ sidebarOpen: true, mobileMenuOpen: false }" class="flex h-screen overflow-hidden">
+    <div class="flex h-screen overflow-hidden">
         
         <aside 
             :class="sidebarOpen ? 'w-64' : 'w-20'" 
@@ -152,14 +178,18 @@
             
             <div class="flex items-center justify-between px-4 py-6 border-b border-gray-800 flex-shrink-0">
                 <div x-show="sidebarOpen" class="flex items-center space-x-3 overflow-hidden">
-                    <div class="min-w-[40px] w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900/20">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                        </svg>
+                    <div class="min-w-[40px] w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900/20 overflow-hidden">
+                        @if(Auth::user()?->hospital?->logo)
+                            <img src="{{ asset('storage/' . Auth::user()->hospital->logo) }}" alt="Logo" class="w-full h-full object-cover">
+                        @else
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                            </svg>
+                        @endif
                     </div>
                     <div class="truncate">
-                        <h1 class="text-xl font-bold tracking-tight">HospitSIS</h1>
-                        <p class="text-[10px] text-blue-400 font-bold uppercase tracking-widest">Medical Suite</p>
+                        <h1 class="text-lg font-bold tracking-tight truncate">{{ Auth::user()?->hospital?->name ?? 'HospitSIS' }}</h1>
+                        <p class="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{{ Auth::user()?->hospital ? 'Espace Hospitalier' : 'Medical Suite' }}</p>
                     </div>
                 </div>
                 <button @click="sidebarOpen = !sidebarOpen" class="p-2 rounded-lg hover:bg-gray-800 transition focus:outline-none">
@@ -172,7 +202,7 @@
 
             <nav class="flex-1 px-3 py-6 space-y-1 overflow-y-auto custom-scrollbar">
             @auth
-                @if(auth()->user()?->role === 'doctor')
+                @if(auth()->user()?->isDoctor())
                     <div class="pb-4">
                         <p x-show="sidebarOpen" class="px-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Menu Principal</p>
                     </div>
@@ -193,7 +223,16 @@
                             <span x-show="sidebarOpen" class="font-semibold">Dossiers reçus</span>
                         </div>
                         {{-- Badge dynamique pour les dossiers actifs --}}
-                        @php $activeCount = \App\Models\PatientVital::whereIn('status', ['active'])->orWhereNull('status')->count(); @endphp
+                        @php 
+                            $badgeUser = auth()->user();
+                            $activeCountQuery = \App\Models\PatientVital::whereIn('status', ['active', 'consulting'])
+                                ->where('hospital_id', $badgeUser->hospital_id);
+                            
+                            if ($badgeUser->role === 'doctor' || $badgeUser->role === 'internal_doctor') {
+                                $activeCountQuery->where('doctor_id', $badgeUser->id);
+                            }
+                            $activeCount = $activeCountQuery->count();
+                        @endphp
                         @if($activeCount > 0)
                             <span x-show="sidebarOpen" class="bg-red-500 text-[10px] px-2 py-0.5 rounded-lg font-black text-white">{{ $activeCount }}</span>
                         @endif
@@ -222,6 +261,111 @@
                         <span x-show="sidebarOpen" class="font-semibold">Patients</span>
                     </a>
                 @endif
+
+                {{-- MENU TECHNICIEN DE LABORATOIRE --}}
+                {{-- MENU TECHNICIEN DE LABORATOIRE --}}
+                @if(auth()->user()?->role === 'lab_technician')
+                    <div class="pt-4 pb-2">
+                        <p x-show="sidebarOpen" class="px-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Laboratoire</p>
+                    </div>
+
+                    {{-- TABLEAU DE BORD (Résumé) --}}
+                    <a href="{{ route('lab.dashboard') }}" 
+                       class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('lab.dashboard') && !request()->has('filter') ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                        <div class="{{ request()->routeIs('lab.dashboard') && !request()->has('filter') ? 'text-white' : 'text-teal-500 group-hover:text-white' }} transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                        </div>
+                        <span x-show="sidebarOpen" class="font-semibold tracking-wide text-sm">Tableau de bord</span>
+                    </a>
+
+                    {{-- ANALYSES EN COURS --}}
+                     <a href="{{ route('lab.worklist') }}" 
+                       class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('lab.worklist') ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                        <div class="{{ request()->routeIs('lab.worklist') ? 'text-white' : 'text-teal-500 group-hover:text-white' }} transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                        </div>
+                        <span x-show="sidebarOpen" class="font-semibold tracking-wide text-sm">Analyses en cours</span>
+                    </a>
+
+                    {{-- HISTORIQUE --}}
+                     <a href="{{ route('lab.history') }}" 
+                       class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('lab.history') ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                        <div class="{{ request()->routeIs('lab.history') ? 'text-white' : 'text-gray-500 group-hover:text-white' }} transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <span x-show="sidebarOpen" class="font-semibold tracking-wide text-sm">Historique</span>
+                    </a>
+
+                    {{-- STOCK --}}
+                     <a href="{{ route('lab.inventory.index') }}" 
+                       class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('lab.inventory.index') ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                        <div class="{{ request()->routeIs('lab.inventory.index') ? 'text-white' : 'text-gray-500 group-hover:text-white' }} transition-colors">
+                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                        </div>
+                        <span x-show="sidebarOpen" class="font-semibold tracking-wide text-sm">Stock & Matériel</span>
+                    </a>
+                @endif
+                @if(auth()->user()?->role === 'cashier')
+                     <div class="pb-4">
+                        <p x-show="sidebarOpen" class="px-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Caisse</p>
+                    </div>
+
+                    <a href="{{ route('cashier.dashboard') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-gray-800 hover:text-white transition-all">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                        <span x-show="sidebarOpen" class="font-semibold">Tableau de bord</span>
+                    </a>
+
+                    <a href="{{ route('cashier.closing.index') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-gray-800 hover:text-white transition-all">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        <span x-show="sidebarOpen" class="font-semibold">Clôture de Caisse</span>
+                    </a>
+                @endif
+
+                {{-- MENU MÉDECIN BIOLOGISTE (doctor_lab) --}}
+                @if(auth()->user()?->role === 'doctor_lab')
+                    <div class="pt-4 pb-2">
+                        <p x-show="sidebarOpen" class="px-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Biologie Médicale</p>
+                    </div>
+
+                    {{-- TABLEAU DE BORD --}}
+                    <a href="{{ route('lab.biologist.dashboard') }}" 
+                       class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('lab.biologist.dashboard') ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                        <div class="{{ request()->routeIs('lab.biologist.dashboard') ? 'text-white' : 'text-teal-500 group-hover:text-white' }} transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                        </div>
+                        <span x-show="sidebarOpen" class="font-semibold tracking-wide text-sm">Tableau de bord</span>
+                    </a>
+
+
+
+                    {{-- VALIDATION --}}
+                    <a href="{{ route('lab.biologist.validation') }}" 
+                       class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('lab.biologist.validation') ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                        <div class="{{ request()->routeIs('lab.biologist.validation') ? 'text-white' : 'text-gray-500 group-hover:text-white' }} transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                        </div>
+                        <span x-show="sidebarOpen" class="font-semibold tracking-wide text-sm">Validation</span>
+                    </a>
+
+                    {{-- HISTORIQUE --}}
+                    <a href="{{ route('lab.history') }}" 
+                       class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('lab.history') ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                        <div class="{{ request()->routeIs('lab.history') ? 'text-white' : 'text-gray-500 group-hover:text-white' }} transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <span x-show="sidebarOpen" class="font-semibold tracking-wide text-sm">Historique</span>
+                    </a>
+
+                    {{-- STATS --}}
+                    <a href="{{ route('lab.biologist.stats') }}" 
+                       class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('lab.biologist.stats') ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                        <div class="{{ request()->routeIs('lab.biologist.stats') ? 'text-white' : 'text-gray-500 group-hover:text-white' }} transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        </div>
+                        <span x-show="sidebarOpen" class="font-semibold tracking-wide text-sm">Statistiques</span>
+                    </a>
+                @endif
+                
                 @if(auth()->user() && auth()->user()->role === 'admin')
     <div class="pb-4 pt-4">
         <p x-show="sidebarOpen" class="px-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Administration</p>
@@ -240,6 +384,11 @@
     <a href="{{ route('patients.index') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-gray-800 hover:text-white transition-all">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
         <span x-show="sidebarOpen" class="font-semibold">Patients</span>
+    </a>
+
+    <a href="{{ route('admin.finance.index') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('admin.finance.*') ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+        <span x-show="sidebarOpen" class="font-black tracking-tight text-sm">Gestion de la Caisse</span>
     </a>
 
     <a href="{{ route('prestations.index') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-gray-800 hover:text-white transition-all">
@@ -276,7 +425,36 @@
 
         <div class="flex-1 flex flex-col overflow-hidden">
             <main class="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar">
-                @yield('content')
+                {{-- Flash Messages --}}
+                @if(session('success'))
+                    <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 5000)" class="fixed top-20 right-6 z-50 animate-fade-in">
+                        <div class="bg-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            <span class="font-medium">{{ session('success') }}</span>
+                            <button @click="show = false" class="ml-4 text-teal-200 hover:text-white transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                @endif
+
+                @if(session('error'))
+                    <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 8000)" class="fixed top-20 right-6 z-50 animate-fade-in">
+                        <div class="bg-red-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span class="font-medium">{{ session('error') }}</span>
+                            <button @click="show = false" class="ml-4 text-red-200 hover:text-white transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                @endif
+
+                @if(isset($slot))
+                    {{ $slot }}
+                @else
+                    @yield('content')
+                @endif
             </main>
         </div>
     </div>

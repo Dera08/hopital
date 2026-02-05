@@ -38,7 +38,7 @@
 
     <div class="section">
         <strong>Date :</strong> {{ $invoice->invoice_date->format('d/m/Y') }}<br>
-        <strong>Patient :</strong> {{ $invoice->patient->name }}<br>
+        <strong>Patient :</strong> {{ $invoice->patient?->name ?? 'Patient Supprimé' }}<br>
         <strong>Méthode de paiement :</strong> {{ $invoice->payment_method ?? 'Espèces' }}
     </div>
 

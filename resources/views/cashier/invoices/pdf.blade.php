@@ -34,7 +34,7 @@
 
     <div class="section">
         <strong>Date :</strong> {{ $invoice->invoice_date->format('d/m/Y') }}<br>
-        <strong>Patient :</strong> {{ $invoice->patient->name }}
+        <strong>Patient :</strong> {{ $invoice->patient?->name ?? 'Patient Supprimé' }}
     </div>
 
     <table>

@@ -94,20 +94,55 @@ class PatientController extends Controller
         }
     }
 
-    public function show(Patient $patient)
-  {
-    // Charger les patientVitals pour l'historique
-    $patientVitals = \App\Models\PatientVital::where('patient_ipu', $patient->ipu)
-        ->orderBy('created_at', 'desc')
-        ->get();
+    public function show($id)
+    {
+        // On récupère le patient même s'il est supprimé (withTrashed)
+        // et on ignore les scopes globaux pour être sûr de le trouver (withoutGlobalScopes)
+        $patient = \App\Models\Patient::withTrashed()->withoutGlobalScopes()->findOrFail($id);
 
-    // On ajoute 'clinicalObservations.user' pour charger les soins et le nom du médecin qui les a faits
-    $patient->load(['clinicalObservations' => function($query) {
-        $query->orderBy('observation_datetime', 'desc');
-    }, 'clinicalObservations.user']);
+        // Charger les patientVitals ACTIFS UNIQUEMENT (non archivés) pour l'historique
+        $patientVitals = \App\Models\PatientVital::where('patient_ipu', $patient->ipu)
+            ->where(function($q) {
+                // Filtrer uniquement les dossiers actifs (non archivés)
+                $q->where('status', '!=', 'archived')
+                  ->orWhereNull('status');
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
 
-    return view('patients.show', compact('patient', 'patientVitals'));
-  }
+        // Déterminer la date minimale des PatientVitals actifs (pour filtrer les prescriptions et analyses)
+        $minActiveDate = $patientVitals->min('created_at');
+        
+        // Si aucun PatientVital actif, utiliser une date très récente pour tout masquer
+        if (!$minActiveDate) {
+            $minActiveDate = now();
+        }
+
+        // Charger les observations cliniques (la table n'a pas de colonne status)
+        // On les filtre par date pour ne montrer que celles du parcours actuel
+        $patient->load(['clinicalObservations' => function($query) use ($minActiveDate) {
+            $query->where('created_at', '>=', $minActiveDate)
+                ->orderBy('observation_datetime', 'desc');
+        }, 'clinicalObservations.user', 
+        'labRequests' => function($query) use ($minActiveDate) {
+            // Filtrer les analyses par date pour le parcours actuel
+            $query->where('created_at', '>=', $minActiveDate)
+                ->orderBy('created_at', 'desc');
+        }, 'labRequests.doctor', 'labRequests.biologist', 'labRequests.labTechnician',
+        'prescriptions' => function($query) use ($minActiveDate) {
+            // Filtrer les prescriptions par date pour le parcours actuel
+            $query->where('created_at', '>=', $minActiveDate)
+                ->orderBy('created_at', 'desc');
+        }, 'prescriptions.doctor']);
+
+        // Fusionner uniquement les consultations (vitals) et observations cliniques ACTIVES pour la timeline
+        $allExams = $patientVitals->concat($patient->clinicalObservations)
+                                  ->sortByDesc(function($item) {
+            return $item->observation_datetime ?? $item->created_at;
+        });
+
+        return view('patients.show', compact('patient', 'allExams', 'patientVitals'));
+    }
 
     public function edit(Patient $patient)
     {
@@ -249,13 +284,100 @@ class PatientController extends Controller
     }
     public function archive(\App\Models\Patient $patient)
 {
-    // On utilise la colonne 'is_active' que j'ai vue dans vos logs SQL
-    $patient->update([
-        'is_active' => false 
-    ]);
+    DB::beginTransaction();
+    try {
+        // 1. Récupérer TOUS les PatientVitals actifs (non archivés)
+        $activeVitals = \App\Models\PatientVital::where('patient_ipu', $patient->ipu)
+            ->where(function($q) {
+                $q->where('status', '!=', 'archived')
+                  ->orWhereNull('status');
+            })
+            ->get();
+        
+        if ($activeVitals->isEmpty()) {
+            return back()->with('info', 'Aucune donnée active à archiver.');
+        }
+        
+        // 2. Déterminer la plage de dates des données actives
+        $minDate = $activeVitals->min('created_at');
+        $maxDate = $activeVitals->max('created_at');
+        
+        // 3. PARTAGE AUTOMATIQUE : Marquer toutes les prescriptions comme visibles au patient
+        \App\Models\Prescription::where('patient_id', $patient->id)
+            ->whereBetween('created_at', [$minDate, $maxDate])
+            ->update(['is_visible_to_patient' => true]);
+        
+        // 4. PARTAGE AUTOMATIQUE : Marquer toutes les analyses comme visibles au patient
+        \App\Models\LabRequest::where('patient_ipu', $patient->ipu)
+            ->whereBetween('created_at', [$minDate, $maxDate])
+            ->update(['is_visible_to_patient' => true]);
+        
+        // 5. PARTAGE AUTOMATIQUE : Marquer les PatientVitals comme visibles
+        $activeVitals->each(fn($v) => $v->update(['is_visible_to_patient' => true]));
+        
+        // 6. Marquer les PatientVitals comme archivés
+        $activeVitals->each(fn($v) => $v->update(['status' => 'archived']));
+        
+        // Journalisation
+        AuditLog::log('archive', 'Patient', $patient->id, [
+            'description' => 'Archivage du dossier patient et partage automatique avec le portail patient',
+            'vitals_archived' => $activeVitals->count(),
+        ]);
 
-    // On redirige vers le dashboard du médecin avec un message
-    return redirect()->route('medecin.dashboard')
-                     ->with('success', 'Le dossier du patient ' . $patient->name . ' a été archivé.');
+        DB::commit();
+
+        // On redirige vers le dashboard du médecin avec un message
+        return redirect()->route('medecin.dashboard')
+                         ->with('success', 'Le dossier de ' . $patient->name . ' a été archivé et partagé avec le patient.');
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return back()->withErrors(['error' => 'Erreur lors de l\'archivage : ' . $e->getMessage()]);
+    }
  } 
+
+ public function showArchives(Patient $patient)
+ {
+    // Récupérer TOUS les PatientVitals archivés du patient
+    $archivedVitals = \App\Models\PatientVital::where('patient_ipu', $patient->ipu)
+        ->where('status', 'archived')
+        ->orderBy('created_at', 'desc')
+        ->get();
+    
+    // Si aucune donnée archivée, rediriger
+    if ($archivedVitals->isEmpty()) {
+        return redirect()->route('medical_records.archives')
+            ->with('info', 'Aucun dossier archivé trouvé pour ce patient.');
+    }
+    
+    // Déterminer la date minimale et maximale de l'ensemble archivé
+    $minArchiveDate = $archivedVitals->min('created_at');
+    $maxArchiveDate = $archivedVitals->max('created_at');
+    
+    // Charger toutes les données associées à cette période archivée
+    $patient->load([
+        'prescriptions' => function($query) use ($minArchiveDate, $maxArchiveDate) {
+            $query->whereBetween('created_at', [$minArchiveDate, $maxArchiveDate])
+                  ->orderBy('created_at', 'desc');
+        },
+        'prescriptions.doctor',
+        'labRequests' => function($query) use ($minArchiveDate, $maxArchiveDate) {
+            $query->whereBetween('created_at', [$minArchiveDate, $maxArchiveDate])
+                  ->orderBy('created_at', 'desc');
+        },
+        'labRequests.doctor',
+        'clinicalObservations' => function($query) use ($minArchiveDate, $maxArchiveDate) {
+            $query->whereBetween('created_at', [$minArchiveDate, $maxArchiveDate])
+                  ->orderBy('observation_datetime', 'desc');
+        },
+        'clinicalObservations.user'
+    ]);
+    
+    // Fusionner les vitals et observations pour la timeline
+    $allExams = $archivedVitals->concat($patient->clinicalObservations)
+                              ->sortByDesc(function($item) {
+        return $item->observation_datetime ?? $item->created_at;
+    });
+    
+    return view('patients.archives', compact('patient', 'archivedVitals', 'allExams'));
+ }
 }

@@ -26,6 +26,7 @@ class PrescriptionController extends Controller
             'medication'   => 'required|string',
             'duration'     => 'nullable|string',
             'instructions' => 'nullable|string',
+            'category'     => 'nullable|string|in:pharmacy,nurse',
         ]);
 
         // Correction : On n'utilise plus 'dosage' car la colonne n'existe pas.
@@ -41,6 +42,7 @@ class PrescriptionController extends Controller
             'is_signed'       => false,
             'status'          => 'active',
             'allergy_checked' => false,
+            'category'        => $validated['category'] ?? 'pharmacy',
         ]);
 
         return redirect()->route('patients.show', $patient->id)

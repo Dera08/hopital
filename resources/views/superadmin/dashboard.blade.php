@@ -118,6 +118,8 @@
 
         @include('superadmin.tabs.hospitals')
 
+        @include('superadmin.tabs.specialists')
+
         <!-- === SUBSCRIPTION PLANS MANAGEMENT === -->
         @include('superadmin.tabs.subscription-plans')
 
@@ -589,7 +591,7 @@
 
         // Toggle hospital status
         function toggleHospitalStatus(hospitalId, isActive) {
-            fetch(`/superadmin/hospitals/${hospitalId}/toggle-status`, {
+            fetch(`{{ url('admin-system/hospitals') }}/${hospitalId}/toggle-status`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -623,7 +625,7 @@
         // Open hospital details modal
         function openHospitalDetails(hospitalId) {
             // Fetch hospital details
-            fetch(`/admin-system/hospitals/${hospitalId}/details`, {
+            fetch(`{{ url('admin-system/hospitals') }}/${hospitalId}/details`, {
                 method: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
@@ -876,7 +878,7 @@
             const features = formData.get('features').split('\n').filter(f => f.trim());
 
             try {
-                const response = await fetch('/admin-system/subscription-plans', {
+                const response = await fetch(`{{ url('admin-system/subscription-plans') }}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1009,7 +1011,7 @@
 
             const isEditing = editingCommissionId !== null;
             const method = isEditing ? 'PUT' : 'POST';
-            const url = isEditing ? `/admin-system/commission-rates/${editingCommissionId}` : '/admin-system/commission-rates';
+            const url = isEditing ? `{{ url('admin-system/commission-rates') }}/${editingCommissionId}` : `{{ url('admin-system/commission-rates') }}`;
 
             console.log('Submitting:', { isEditing, method, url, editingCommissionId, bracketsCount: brackets.length });
 
@@ -1079,7 +1081,7 @@
         }
 
         function loadSubscriptionPlans() {
-            fetch('/admin-system/subscription-plans', {
+            fetch(`{{ url('admin-system/subscription-plans') }}`, {
                 method: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
@@ -1140,7 +1142,7 @@
 
         function deleteSubscriptionPlan(planId) {
             if (confirm('Êtes-vous sûr de vouloir supprimer ce plan ?')) {
-                fetch(`/admin-system/subscription-plans/${planId}`, {
+                fetch(`{{ url('admin-system/subscription-plans') }}/${planId}`, {
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
@@ -1169,7 +1171,7 @@
             if (rateId) {
                 // Edit existing rate - load data first
                 console.log('Loading commission rate:', rateId);
-                fetch(`/admin-system/commission-rates/${rateId}`, {
+                fetch(`{{ url('admin-system/commission-rates') }}/${rateId}`, {
                     method: 'GET',
                     headers: {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
@@ -1204,7 +1206,7 @@
         }
 
         function loadCommissionRates() {
-            fetch('/admin-system/commission-rates', {
+            fetch(`{{ url('admin-system/commission-rates') }}`, {
                 method: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
@@ -1273,7 +1275,7 @@
 
         function deleteCommissionRate(rateId) {
             if (confirm('Êtes-vous sûr de vouloir supprimer cette règle ?')) {
-                fetch(`/admin-system/commission-rates/${rateId}`, {
+                fetch(`{{ url('admin-system/commission-rates') }}/${rateId}`, {
                     method: 'DELETE',
                     headers: {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}'
@@ -1303,7 +1305,7 @@
         }
 
         function loadFinancialStats() {
-            fetch('/admin-system/financial-monitoring', {
+            fetch(`{{ url('admin-system/financial-monitoring') }}`, {
                 method: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
@@ -1316,10 +1318,10 @@
                 statsContainer.innerHTML = '';
 
                 const stats = [
-                    { label: 'Revenus SaaS Total', value: data.stats.total_saas_revenue, icon: 'bi-cash-stack', color: 'blue' },
-                    { label: 'Total Commissions', value: data.stats.total_commissions, icon: 'bi-percent', color: 'purple' },
-                    { label: 'Revenus SaaS Mensuel', value: data.stats.monthly_saas_revenue, icon: 'bi-calendar', color: 'green' },
-                    { label: 'Commissions Mensuelles', value: data.stats.monthly_commissions, icon: 'bi-graph-up', color: 'orange' }
+                    { label: 'Revenus SaaS Total', value: data.stats.total_revenue, icon: 'bi-bank', color: 'blue' },
+                    { label: 'Frais Activation', value: data.stats.activation_fees, icon: 'bi-person-check', color: 'indigo' },
+                    { label: 'Commissions Actes', value: data.stats.specialist_commissions, icon: 'bi-percent', color: 'purple' },
+                    { label: 'Abonnements Hôpitaux', value: data.stats.hospital_subscriptions, icon: 'bi-building-check', color: 'emerald' }
                 ];
 
                 stats.forEach(stat => {
@@ -1344,7 +1346,7 @@
         }
 
         function loadFinancialLists() {
-            fetch('/admin-system/financial-monitoring', {
+            fetch(`{{ url('admin-system/financial-monitoring') }}`, {
                 method: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
@@ -1461,7 +1463,7 @@
 
         function blockSpecialistWallet(specialistId) {
             if (confirm('Êtes-vous sûr de vouloir bloquer le portefeuille de ce spécialiste ?')) {
-                fetch(`/admin-system/specialists/${specialistId}/block-wallet`, {
+                fetch(`{{ url('admin-system/specialists') }}/${specialistId}/block-wallet`, {
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}'
@@ -1650,7 +1652,7 @@
         }
 
         function loadSpecialistsForTest() {
-            fetch('/admin-system/test-specialists')
+            fetch(`{{ url('admin-system/test-specialists') }}`)
                 .then(response => response.json())
                 .then(data => {
                     const select = document.getElementById('testSpecialistSelect');
@@ -1695,7 +1697,7 @@
             submitBtn.innerHTML = '<i class="bi bi-hourglass-split animate-spin text-2xl"></i> <span class="font-black">SIMULATION EN COURS...</span>';
 
             // Send request
-            fetch('/superadmin/specialists/test-recharge', {
+            fetch(`{{ url('admin-system/specialists/test-recharge') }}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1713,9 +1715,9 @@
 
                     // Refresh dashboard data after 2 seconds
                     setTimeout(() => {
-                        loadFinancialData();
-                        loadRecentTransactions();
+                        refreshFinancialData();
                     }, 2000);
+
                 } else {
                     showNotification(data.message || 'Erreur lors de la simulation', 'error');
                 }
@@ -1729,79 +1731,9 @@
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
             });
+
         }
 
-        function loadSpecialistsForTest() {
-            fetch('/admin-system/test-specialists')
-                .then(response => response.json())
-                .then(data => {
-                    const select = document.getElementById('testSpecialistSelect');
-                    select.innerHTML = '<option value="">Sélectionnez un spécialiste...</option>';
-
-                    if (data.specialists && data.specialists.length > 0) {
-                        data.specialists.forEach(specialist => {
-                            const option = document.createElement('option');
-                            option.value = specialist.id;
-                            option.textContent = `${specialist.name} (${specialist.specialty})`;
-                            select.appendChild(option);
-                        });
-                    } else {
-                        select.innerHTML = '<option value="">Aucun spécialiste disponible</option>';
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur lors du chargement des spécialistes:', error);
-                    const select = document.getElementById('testSpecialistSelect');
-                    select.innerHTML = '<option value="">Erreur de chargement</option>';
-                });
-        }
-
-        function runTestRecharge() {
-            const specialistId = document.getElementById('testSpecialistSelect').value;
-
-            if (!specialistId) {
-                showNotification('Veuillez sélectionner un spécialiste', 'error');
-                return;
-            }
-
-            // Show loading
-            const button = event.target;
-            const originalText = button.innerHTML;
-            button.innerHTML = '<i class="bi bi-hourglass-split text-xl animate-spin"></i> Simulation en cours...';
-            button.disabled = true;
-
-            fetch('/admin-system/specialists/test-recharge', {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    specialist_id: specialistId
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showNotification('Simulation réussie ! Vérifiez les compteurs.', 'success');
-                    closeTestRechargeModal();
-                    // Refresh financial data after a short delay
-                    setTimeout(refreshFinancialData, 1000);
-                } else {
-                    showNotification('Erreur: ' + data.message, 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showNotification('Erreur lors de la simulation', 'error');
-            })
-            .finally(() => {
-                // Restore button
-                button.innerHTML = originalText;
-                button.disabled = false;
-            });
-        }
 
         // === INVOICES MANAGEMENT ===
 
@@ -1812,8 +1744,7 @@
 
 
         function loadInvoiceStats() {
-            fetch('/admin-system/invoices', {
-        // Simple notification function
+            fetch(`{{ url('admin-system/invoices') }}`, {
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
                     'Accept': 'application/json'
@@ -1853,7 +1784,7 @@
         }
 
         function loadInvoicesTable() {
-            fetch('/admin-system/invoices', {
+            fetch(`{{ url('admin-system/invoices') }}`, {
                 method: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
@@ -1959,122 +1890,11 @@
             addCommissionBracket('15001', '30000', '20');
             addCommissionBracket('30001', '', '25');
         });
-        function showNotification(message, type = 'info') {
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 z-50 p-4 rounded-2xl shadow-xl transform transition-all duration-300 translate-x-full`;
 
-            let bgColor, textColor, icon;
-            switch(type) {
-                case 'success':
-                    bgColor = 'bg-green-500';
-                    textColor = 'text-white';
-                    icon = 'bi-check-circle-fill';
-                    break;
-                case 'error':
-                    bgColor = 'bg-red-500';
-                    textColor = 'text-white';
-                    icon = 'bi-exclamation-triangle-fill';
-                    break;
-                case 'warning':
-                    bgColor = 'bg-yellow-500';
-                    textColor = 'text-white';
-                    icon = 'bi-exclamation-circle-fill';
-                    break;
-                default:
-                    bgColor = 'bg-blue-500';
-                    textColor = 'text-white';
-                    icon = 'bi-info-circle-fill';
-            }
-
-            notification.classList.add(bgColor, textColor);
-            notification.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <i class="bi ${icon} text-xl"></i>
-                    <span class="font-bold">${message}</span>
-                </div>
-            `;
-
-            document.body.appendChild(notification);
-
-            // Animate in
-            setTimeout(() => {
-                notification.classList.remove('translate-x-full');
-            }, 100);
-
-            // Auto remove after 3 seconds
-            setTimeout(() => {
-                notification.classList.add('translate-x-full');
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }, 3000);
-        }
     </script>
 
-    <!-- Onglet Financial Monitoring -->
-    <div id="tab-financial-monitoring" class="tab-pane animate-in slide-in-from-bottom-8 duration-500">
-        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 text-left gap-4">
-            <div>
-                <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Monitoring Financier & Portefeuilles</h2>
-                <p class="text-slate-500 font-medium">Surveillez les revenus, commissions et gestion des portefeuilles spécialistes.</p>
-            </div>
-            <button onclick="openTestRechargeModal()" class="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white px-8 py-4 rounded-3xl font-bold transition shadow-2xl shadow-orange-200 flex items-center justify-center gap-3 group">
-                <i class="bi bi-play-circle-fill group-hover:scale-125 transition-transform"></i>
-                Test Recharge 10k
-            </button>
-        </div>
 
-        <!-- Statistiques Financières -->
-        <div id="financialStats" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 text-left">
-            <!-- Les statistiques seront chargées dynamiquement -->
-        </div>
 
-        <!-- Contenu principal -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Liste des Spécialistes -->
-            <div class="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden text-left">
-                <div class="p-8 border-b border-slate-200">
-                    <h3 class="text-xl font-black text-slate-900 flex items-center gap-3">
-                        <span class="w-2 h-8 bg-purple-600 rounded-full"></span>
-                        Portefeuilles Spécialistes
-                    </h3>
-                    <p class="text-slate-500 mt-2 font-medium">État des comptes et soldes des spécialistes</p>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full border-collapse">
-                        <thead>
-                            <tr class="bg-slate-50/50 text-slate-400 text-[11px] font-black uppercase tracking-widest border-b border-slate-100">
-                                <th class="px-8 py-6">Spécialiste</th>
-                                <th class="px-8 py-6">Solde</th>
-                                <th class="px-8 py-6 text-center">Statut</th>
-                                <th class="px-8 py-6 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="specialistsFinancialList">
-                            <!-- Les données seront chargées dynamiquement -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Transactions Récentes -->
-            <div class="bg-white rounded-[2rem] border border-slate-200 shadow-sm text-left">
-                <div class="p-8 border-b border-slate-200">
-                    <h3 class="text-xl font-black text-slate-900 flex items-center gap-3">
-                        <span class="w-2 h-8 bg-green-600 rounded-full"></span>
-                        Transactions Récentes
-                    </h3>
-                    <p class="text-slate-500 mt-2 font-medium">Historique des mouvements financiers</p>
-                </div>
-                <div class="p-8 space-y-4" id="recentTransactionsList">
-                    <!-- Les transactions seront chargées dynamiquement -->
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Modal for New Subscription Plan -->
     <div id="newPlanModal" class="fixed inset-0 bg-black/70 backdrop-blur-md hidden z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">

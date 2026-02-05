@@ -13,20 +13,25 @@ class ObservationController extends Controller
     {
         $request->validate([
             'patient_id' => 'required|exists:patients,id',
-            // Plage élargie de 10 à 50 pour accepter les tests (ex: 21°C)
-            'temperature' => 'nullable|numeric|between:10,50', 
-            'pulse' => 'nullable|integer|between:10,300',
-            'weight' => 'nullable|numeric|between:0,500',
-            'height' => 'nullable|numeric|between:0,300',
+            'type' => 'nullable|string',
+            'temperature' => 'nullable|numeric|between:30,45', 
+            'pulse' => 'nullable|integer|between:20,250',
+            'weight' => 'nullable|numeric|between:1,500',
+            'height' => 'nullable|numeric|between:30,300',
             'notes' => 'nullable|string',
         ]);
 
-        // CALCUL AUTOMATIQUE DE L'ÉTAT CRITIQUE
-        $is_critical = ($request->temperature >= 38.5 || $request->temperature <= 35.5 || $request->pulse >= 120 || $request->pulse <= 50);
+        $type = $request->input('type', 'vitals');
+        $is_critical = false;
+
+        if ($type === 'vitals') {
+            $is_critical = ($request->temperature >= 38.5 || $request->temperature <= 35.5 || $request->pulse >= 120 || $request->pulse <= 50);
+        }
 
         ClinicalObservation::create([
             'patient_id' => $request->patient_id,
             'user_id' => Auth::id(),
+            'type' => $type,
             'temperature' => $request->temperature,
             'pulse' => $request->pulse,
             'weight' => $request->weight,
@@ -34,7 +39,7 @@ class ObservationController extends Controller
             'notes' => $request->notes,
             'observation_datetime' => now(),
             'is_critical' => $is_critical,
-            'value' => '', 
+            'value' => $type === 'detailed' ? ($request->notes ?? '') : '', 
         ]);
 
         return back()->with('success', 'Examen enregistré.');
@@ -45,8 +50,8 @@ class ObservationController extends Controller
         $obs = ClinicalObservation::findOrFail($id);
         
         $request->validate([
-            'temperature' => 'nullable|numeric|between:10,50',
-            'pulse' => 'nullable|integer|between:10,300',
+            'temperature' => 'nullable|numeric|between:30,45',
+            'pulse' => 'nullable|integer|between:20,250',
         ]);
 
         $is_critical = ($request->temperature >= 38.5 || $request->temperature <= 35.5 || $request->pulse >= 120 || $request->pulse <= 50);

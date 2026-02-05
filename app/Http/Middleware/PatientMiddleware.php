@@ -12,13 +12,13 @@ class PatientMiddleware
     public function handle(Request $request, Closure $next): Response
     {
         if (!Auth::guard('patients')->check()) {
-            return redirect()->route('patient.login')->with('error', 'Veuillez vous connecter.');
+            return redirect()->route('login')->with('error', 'Veuillez vous connecter.');
         }
 
         // Vérifier si le patient est actif
         if (!Auth::guard('patients')->user()->is_active) {
             Auth::guard('patients')->logout();
-            return redirect()->route('patient.login')->with('error', 'Votre compte a été désactivé.');
+            return redirect()->route('login')->with('error', 'Votre compte a été désactivé.');
         }
 
         return $next($request);

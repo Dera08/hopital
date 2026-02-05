@@ -8,14 +8,24 @@ use Illuminate\Support\Facades\Route;
 
 // On utilise les middlewares que vous avez définis dans bootstrap/app.php
 Route::middleware(['auth', 'active_user', 'role:nurse'])->group(function () {
-    
+
     // Affichage du Dashboard React
     Route::get('/nurse/dashboard', [NurseController::class, 'index'])->name('nurse.dashboard');
 
     // Action d'enregistrement des constantes
     Route::post('/nurse/send', [NurseController::class, 'store'])->name('nurse.send');
-   Route::delete('/nurse/vital/{id}', [NurseController::class, 'destroy'])->name('nurse.vital.destroy'); 
+   Route::delete('/nurse/vital/{id}', [NurseController::class, 'destroy'])->name('nurse.vital.destroy');
 
+    // Routes pour les nouveaux onglets
+    Route::get('/nurse/hospitalisation', [NurseController::class, 'hospitalisation'])->name('nurse.hospitalisation');
+    Route::get('/nurse/archive', [NurseController::class, 'archive'])->name('nurse.archive');
+
+    // Polling des statuts
+    Route::get('/nurse/fetch-sent-files', [NurseController::class, 'fetchSentFiles'])->name('nurse.fetch-sent-files');
+
+    // Dashboard Patient dédié (Lecture seule)
+    Route::get('/nurse/patient/{patient}/dashboard', [NurseController::class, 'patientDashboard'])->name('nurse.patient.dashboard');
+    Route::post('/nurse/care-note', [NurseController::class, 'storeCareNote'])->name('nurse.care-note.store');
 });
  
 // SUPPRIMEZ la ligne require __DIR__.'/auth.php'; car elle est déjà dans web.php

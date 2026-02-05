@@ -5,7 +5,8 @@ use App\Http\Controllers\{
     AdmissionController, PrescriptionController, MedicalRecordController,
     UserController, RoomController, InvoiceController, PortalController,
     ReportController, ObservationController, NurseController, ServiceController,
-    HospitalController, PrestationController, CashierController, ProfileController
+    HospitalController, PrestationController, CashierController, ProfileController,
+    LabRequestController
 };
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Patient\PatientPortalController;
@@ -26,10 +27,9 @@ Route::get('/', function () {
     if (auth()->check()) {
         $user = auth()->user();
         return match($user->role) {
-            'doctor' => redirect()->route('medecin.dashboard'),
+            'doctor', 'internal_doctor' => redirect()->route('medecin.dashboard'),
             'nurse' => redirect()->route('nurse.dashboard'),
-            'internal_doctor' => redirect()->route('doctor.internal.dashboard'),
-            'external_doctor' => redirect()->route('doctor.external.dashboard'),
+            'medecin', 'external_doctor' => redirect()->route('external.doctor.external.dashboard'),
             'cashier' => redirect()->route('cashier.dashboard'),
             default => redirect()->route('dashboard')
         };
@@ -65,10 +65,9 @@ Route::middleware('guest')->group(function () {
 
             $user = auth()->user();
             return match($user->role) {
-                'doctor' => redirect()->route('medecin.dashboard'),
+                'doctor', 'internal_doctor' => redirect()->route('medecin.dashboard'),
                 'nurse' => redirect()->route('nurse.dashboard'),
-                'internal_doctor' => redirect()->route('doctor.internal.dashboard'),
-                'external_doctor' => redirect()->route('doctor.external.dashboard'),
+                'medecin', 'external_doctor' => redirect()->route('external.doctor.external.dashboard'),
                 'cashier' => redirect()->route('cashier.dashboard'),
                 default => redirect()->intended(route('dashboard'))
             };
@@ -95,10 +94,10 @@ Route::post('/logout', function (\Illuminate\Http\Request $request) {
 // ========== PORTAIL PATIENT ==========
 Route::prefix('portal')->name('patient.')->group(function () {
     Route::middleware('guest:patients')->group(function () {
-        Route::get('/login', [PatientAuthController::class, 'showLoginForm'])->name('login');
-        Route::post('/login', [PatientAuthController::class, 'login'])->name('login.submit');
-        Route::get('/register', [PatientAuthController::class, 'showRegistrationForm'])->name('register');
-        Route::post('/register', [PatientAuthController::class, 'register'])->name('register.submit');
+        Route::get('login', [PatientAuthController::class, 'showLoginForm'])->name('login');
+        Route::post('login', [PatientAuthController::class, 'login'])->name('login.submit');
+        Route::get('register', [PatientAuthController::class, 'showRegistrationForm'])->name('register');
+        Route::post('register', [PatientAuthController::class, 'register'])->name('register.submit');
     });
     
     Route::middleware('auth:patients')->group(function () {
@@ -106,6 +105,7 @@ Route::prefix('portal')->name('patient.')->group(function () {
         Route::get('/profile', [PatientPortalController::class, 'profile'])->name('profile');
         Route::put('/profile', [PatientPortalController::class, 'updateProfile'])->name('profile.update');
         Route::get('/appointments', [PatientPortalController::class, 'appointments'])->name('appointments');
+        Route::delete('/appointments/{appointment}', [PatientPortalController::class, 'cancelAppointment'])->name('cancel-appointment');
         Route::get('/book-appointment', [PatientPortalController::class, 'bookAppointment'])->name('book-appointment');
         Route::post('/book-appointment', [PatientPortalController::class, 'storeAppointment'])->name('book-appointment.store');
         
@@ -113,9 +113,14 @@ Route::prefix('portal')->name('patient.')->group(function () {
         Route::get('/hospitals/{hospital}/services', [PatientPortalController::class, 'getHospitalServices'])->name('hospitals.services');
         
         Route::get('/documents', [PatientPortalController::class, 'documents'])->name('documents');
-        Route::get('/medical-history', [PatientPortalController::class, 'medicalHistory'])->name('medical-history');
+    // Medical History
+    Route::get('medical-history', [PatientPortalController::class, 'medicalHistory'])->name('medical-history');
+    Route::get('medical-history/{id}', [PatientPortalController::class, 'showMedicalRecord'])->name('medical-history.show');
+    Route::get('medical-history/admission/{id}', [PatientPortalController::class, 'showAdmission'])->name('medical-history.admission.show');
         Route::get('/prescriptions', [PatientPortalController::class, 'prescriptions'])->name('prescriptions');
+        Route::get('/prescriptions/{id}/download', [PatientPortalController::class, 'downloadPrescription'])->name('prescriptions.download');
         Route::get('/invoices', [PatientPortalController::class, 'invoices'])->name('invoices');
+        Route::get('/invoices/{id}/download', [PatientPortalController::class, 'downloadInvoice'])->name('invoices.pdf');
         Route::get('/health-metrics', [PatientPortalController::class, 'healthMetrics'])->name('health-metrics');
         Route::get('/emergency-contacts', [PatientPortalController::class, 'emergencyContacts'])->name('emergency-contacts');
         Route::get('/messaging', [PatientPortalController::class, 'messaging'])->name('messaging');
@@ -129,7 +134,60 @@ Route::prefix('portal')->name('patient.')->group(function () {
     });
 });
 
- 
+// ========== PORTAIL MÉDECIN EXTERNE ==========
+Route::prefix('medecin/externe')->name('external.')->group(function () {
+    Route::middleware('guest')->group(function () {
+        Route::get('/register', [ExternalDoctorController::class, 'showRegistrationForm'])->name('register');
+        Route::post('/register', [ExternalDoctorController::class, 'register'])->name('register.submit');
+    });
+    
+    Route::middleware(['auth:medecin_externe'])->group(function () {
+        // Dashboard
+        Route::get('/tableau-de-bord', [ExternalDoctorController::class, 'dashboard'])->name('doctor.external.dashboard');
+        // Action de déconnexion spécifique
+        Route::post('/logout', function (\Illuminate\Http\Request $request) {
+            Auth::guard('medecin_externe')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return redirect()->route('login');
+        })->name('logout');
+        
+        // Toggle disponibilité
+        Route::post('/toggle-availability', [ExternalDoctorController::class, 'toggleAvailability'])->name('toggle-availability');
+        
+        // Patients
+        Route::get('/patients', [ExternalDoctorController::class, 'patients'])->name('patients');
+        
+        // Dossiers partagés
+        Route::get('/dossiers', [ExternalDoctorController::class, 'sharedRecords'])->name('shared-records');
+        
+        // Prescriptions
+        Route::get('/prescriptions', [ExternalDoctorController::class, 'prescriptions'])->name('prescriptions');
+        
+        // Rendez-vous
+        Route::get('/rendez-vous', [ExternalDoctorController::class, 'appointments'])->name('appointments');
+        
+        // Prestations
+        Route::get('/prestations', [ExternalDoctorController::class, 'prestations'])->name('prestations');
+        Route::post('/prestations', [ExternalDoctorController::class, 'storePrestation'])->name('prestations.store');
+        Route::put('/prestations/{id}', [ExternalDoctorController::class, 'updatePrestation'])->name('prestations.update');
+        Route::post('/prestations/{id}/toggle', [ExternalDoctorController::class, 'togglePrestation'])->name('prestations.toggle');
+        Route::delete('/prestations/{id}', [ExternalDoctorController::class, 'destroyPrestation'])->name('prestations.destroy');
+        
+        // Profil
+        Route::get('/profil', [ExternalDoctorController::class, 'profile'])->name('profile');
+        Route::post('/profil', [ExternalDoctorController::class, 'updateProfile'])->name('profile.update');
+        
+        // Paramètres
+        Route::get('/parametres', [ExternalDoctorController::class, 'settings'])->name('settings');
+        Route::put('/parametres/password', [ExternalDoctorController::class, 'updatePassword'])->name('settings.password');
+        
+        // Rechargement
+        Route::get('/recharger', [ExternalDoctorController::class, 'recharge'])->name('recharge');
+        Route::post('/recharger', [ExternalDoctorController::class, 'initiateRecharge'])->name('recharge.initiate');
+    });
+});
+
 // ========== ROUTES STAFF (Admin, Réception, etc.) ==========
 Route::middleware(['auth', 'active_user'])->group(function () {
 
@@ -175,6 +233,7 @@ Route::middleware(['auth', 'active_user'])->group(function () {
     Route::post('/appointments/{appointment}/confirm', [AppointmentController::class, 'confirm'])->name('appointments.confirm');
     Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel'])->name('appointments.cancel');
     Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.updateStatus');
+    Route::post('/appointments/{appointment}/approve', [AppointmentController::class, 'approve'])->name('appointments.approve');
 
     // ADMISSIONS & LITS
     Route::resource('admissions', AdmissionController::class);
@@ -192,6 +251,7 @@ Route::middleware(['auth', 'active_user'])->group(function () {
         Route::get('/patients/{patient}/records', [MedicalRecordController::class, 'index'])->name('patients.records.index');
         // Correction de la virgule ici pour la cohérence
         Route::get('/archives', [MedicalRecordController::class, 'archivesIndex'])->name('medical_records.archives');
+        Route::get('/archives/patients/{patient}', [PatientController::class, 'showArchives'])->name('patients.archives.show');
     });
 
     // 2. ACCÈS MÉDECIN / ADMIN / INFIRMIER UNIQUEMENT (CONSULTATION & ÉDITION)
@@ -230,14 +290,22 @@ Route::middleware(['auth', 'active_user'])->group(function () {
     Route::resource('services', ServiceController::class)->only(['index', 'create', 'store']);
     Route::resource('prestations', PrestationController::class);
 
+    // Lab Requests
+    Route::middleware('role:doctor,internal_doctor')->group(function () {
+        Route::post('/lab/request', [LabRequestController::class, 'store'])->name('lab.request.store');
+    });
+
     // CASHIER ROUTES (CAISSIER)
     Route::middleware('role:cashier')->group(function () {
         Route::get('/cashier/dashboard', [CashierController::class, 'dashboard'])->name('cashier.dashboard');
         Route::get('/cashier/appointments', [CashierController::class, 'appointments'])->name('cashier.appointments.index');
         Route::get('/cashier/walk-in', [CashierController::class, 'walkInConsultations'])->name('cashier.walk-in.index');
         Route::post('/cashier/walk-in', [CashierController::class, 'createWalkInConsultation'])->name('cashier.walk-in.store');
+        Route::get('/cashier/walk-in/{consultation}/details', [CashierController::class, 'getWalkInDetails'])->name('cashier.walk-in.details');
+        Route::get('/cashier/lab-requests/{labRequest}/details', [CashierController::class, 'getLabRequestDetails'])->name('cashier.lab.details'); // New Route
         Route::post('/cashier/walk-in/{consultation}/validate-payment', [CashierController::class, 'validateWalkInPayment'])->name('cashier.walk-in.validate-payment');
         Route::get('/cashier/payments', [CashierController::class, 'payments'])->name('cashier.payments.index');
+        Route::post('/cashier/lab-requests/{labRequest}/pay', [CashierController::class, 'payLabRequest'])->name('cashier.lab.pay'); // New Route
         Route::get('/cashier/invoices', [CashierController::class, 'invoices'])->name('cashier.invoices.index');
         Route::get('/cashier/patients', [CashierController::class, 'patients'])->name('cashier.patients.index');
         Route::post('/cashier/appointments/{appointment}/validate-payment', [CashierController::class, 'validatePayment'])->name('cashier.validate-payment');
@@ -247,34 +315,25 @@ Route::middleware(['auth', 'active_user'])->group(function () {
         Route::get('/cashier/invoices/{invoice}/pdf', [CashierController::class, 'downloadInvoice'])->name('cashier.invoices.pdf');
         Route::get('/cashier/settings', [CashierController::class, 'settings'])->name('cashier.settings.index');
         Route::put('/cashier/settings/update', [CashierController::class, 'updateSettings'])->name('cashier.settings.update');
+
+        // SIMULATION PAIEMENT (DEV)
+        Route::get('/payment/simulation/{id}', [CashierController::class, 'simulatePayment'])->name('simulation.payment');
+        Route::match(['get', 'post'], '/payment/simulation/{id}/validate', [CashierController::class, 'processSimulation'])->name('simulation.payment.validate');
     });
 
     // Profil & Paramètres
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    
+    // Doctor Availability Routes
+    Route::post('/profile/availability/initialize', [ProfileController::class, 'initializeAvailability'])->name('profile.availability.initialize');
+    Route::post('/profile/availability/update', [ProfileController::class, 'updateAvailability'])->name('profile.availability.update');
+    Route::post('/profile/availability/{id}/toggle', [ProfileController::class, 'toggleAvailabilitySlot'])->name('profile.availability.toggle');
+
     Route::get('/settings', fn() => view('settings.index'))->name('settings');
 
 
-
-    // Portails Médecins
-    Route::prefix('medecin')->name('medecin.')->middleware(['auth'])->group(function () {
-        Route::get('/dashboard', [MedecinDashboardController::class, 'index'])->name('dashboard');
-    });
-
-    Route::prefix('medecin/interne')->name('doctor.')->middleware(['auth', 'active_user', 'role:internal_doctor'])->group(function () {
-        Route::get('/tableau-de-bord', [MedecinDashboardController::class, 'index'])->name('internal.dashboard');
-    });
-
-    Route::prefix('medecin/externe')->name('external.')->group(function () {
-        Route::middleware('guest')->group(function () {
-            Route::get('/login', [ExternalDoctorController::class, 'showLoginForm'])->name('login');
-            Route::post('/login', [ExternalDoctorController::class, 'login']);
-        });
-        Route::middleware(['auth', 'active_user', 'role:external_doctor'])->group(function () {
-            Route::get('/tableau-de-bord', [ExternalDoctorController::class, 'dashboard'])->name('doctor.external.dashboard');
-        });
-    });
 
     Route::middleware(['auth', 'active_user', 'role:admin'])->group(function () {
         Route::get('/subscription/manage', [DashboardController::class, 'manageSubscription'])->name('admin.subscription.manage');
@@ -293,13 +352,44 @@ Route::middleware(['auth', 'active_user'])->group(function () {
     // Webhook (public) for CinetPay - used by ngrok during testing
     Route::post('/payment/cinetpay/webhook', [SubscriptionController::class, 'handleCinetpayWebhook'])
         ->name('cinetpay.webhook');
+    
+    // Webhook for Mobile Money payments (walk-in consultations)
+    Route::post('/cashier/mobile-money/webhook', [CashierController::class, 'handleMobileMoneyWebhook'])
+        ->name('cashier.mobile-money.webhook');
+
+    // ADMIN FINANCE ROUTES
+    Route::middleware('role:admin')->group(function() {
+        Route::get('/admin/finance', [App\Http\Controllers\Admin\AdminFinanceController::class, 'index'])->name('admin.finance.index');
+        Route::get('/admin/finance/daily', [App\Http\Controllers\Admin\AdminFinanceController::class, 'dailyDetails'])->name('admin.finance.daily');
+        Route::get('/admin/finance/treasury', [App\Http\Controllers\Admin\AdminFinanceController::class, 'treasuryDetails'])->name('admin.finance.treasury');
+        Route::get('/admin/finance/export', [App\Http\Controllers\Admin\AdminFinanceController::class, 'exportInvoices'])->name('admin.finance.export');
+        Route::post('/admin/finance/confirm/{id}', [App\Http\Controllers\Admin\AdminFinanceController::class, 'confirmTransfer'])->name('admin.finance.confirm');
+    });
+
+    // CASHIER CLOSING ROUTES
+    Route::middleware('role:cashier')->group(function() {
+        Route::get('/cashier/closing', [App\Http\Controllers\Cashier\CashierClosingController::class, 'index'])->name('cashier.closing.index');
+        Route::get('/cashier/closing/totals', [App\Http\Controllers\Cashier\CashierClosingController::class, 'getTotals'])->name('cashier.closing.totals');
+        Route::post('/cashier/transfer', [App\Http\Controllers\Cashier\CashierClosingController::class, 'store'])->name('cashier.transfer.store');
+    });
 
 }); // FIN DU MIDDLEWARE AUTH PRINCIPAL
+
+// Portails Médecins
+Route::prefix('medecin')->name('medecin.')->middleware(['auth:web,medecin_externe'])->group(function () {
+    Route::get('/dashboard', [MedecinDashboardController::class, 'index'])->name('dashboard');
+});
+
+Route::prefix('medecin/interne')->name('doctor.')->middleware(['auth', 'active_user', 'role:internal_doctor'])->group(function () {
+    Route::get('/tableau-de-bord', [MedecinDashboardController::class, 'index'])->name('internal.dashboard');
+});
+
 
 // ROUTES PUBLIQUES
 Route::get('/health', fn() => response()->json(['status' => 'ok']))->name('health.check');
 
 require __DIR__.'/nurse.php';
+require __DIR__.'/lab.php';
 require __DIR__.'/superadmin.php';
 
 Route::fallback(fn() => response()->view('errors.404', [], 404));

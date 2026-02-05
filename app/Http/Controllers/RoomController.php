@@ -31,17 +31,17 @@ class RoomController extends Controller
 
     // 2. Création de la chambre
     $room = Room::create([
-        'room_number' => $request->room_number,
-        'service_id'  => $request->service_id,
-        'capacity'    => $request->capacity,
-        'hospital_id' => auth()->user()->hospital_id, // Sécurité : lié à l'hôpital de l'admin
+        'room_number'  => $request->room_number,
+        'service_id'   => $request->service_id,
+        'bed_capacity' => $request->capacity,
+        'hospital_id'  => auth()->user()->hospital_id,
     ]);
 
     // 3. Création automatique des lits (La boucle magique)
     for ($i = 1; $i <= $request->capacity; $i++) {
-        \App\Models\Bed::create([
+        Bed::create([
             'room_id'      => $room->id,
-            'bed_number'   => "Lit " . $i, // Nomme les lits : Lit 1, Lit 2...
+            'bed_number'   => $request->room_number . "-L" . $i,
             'is_available' => true,
             'hospital_id'  => auth()->user()->hospital_id,
         ]);
@@ -55,6 +55,70 @@ class RoomController extends Controller
     {
         // On charge les lits et les patients admis sur ces lits
         $room->load(['service', 'beds.patient']);
-        return view('rooms.show', compact('room'));
+        
+        // Récupérer les patients actifs de cet hôpital pour l'assignation
+        $patients = \App\Models\Patient::where('hospital_id', auth()->user()->hospital_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+            
+        return view('rooms.show', compact('room', 'patients'));
+    }
+
+    public function assign(Request $request, Room $room)
+    {
+        $request->validate([
+            'bed_id' => 'required|exists:beds,id',
+            'patient_id' => 'required|exists:patients,id',
+        ]);
+
+        $bed = Bed::findOrFail($request->bed_id);
+        
+        // Vérifier que le lit est disponible
+        if (!$bed->is_available) {
+            return back()->with('error', 'Ce lit est déjà occupé.');
+        }
+
+        // Créer une admission
+        \App\Models\Admission::create([
+            'hospital_id' => auth()->user()->hospital_id,
+            'patient_id' => $request->patient_id,
+            'room_id' => $room->id,
+            'bed_id' => $bed->id,
+            'doctor_id' => auth()->id(),
+            'admission_date' => now(),
+            'status' => 'active',
+        ]);
+
+        // Marquer le lit comme occupé
+        $bed->update(['is_available' => false]);
+
+        return back()->with('success', 'Patient assigné avec succès.');
+    }
+
+    public function release(Request $request, Room $room)
+    {
+        $request->validate([
+            'bed_id' => 'required|exists:beds,id',
+        ]);
+
+        $bed = Bed::findOrFail($request->bed_id);
+        
+        // Terminer l'admission active
+        $admission = \App\Models\Admission::where('bed_id', $bed->id)
+            ->where('status', 'active')
+            ->first();
+
+        if ($admission) {
+            $admission->update([
+                'status' => 'discharged',
+                'discharge_date' => now(),
+            ]);
+        }
+
+        // Libérer le lit
+        $bed->update(['is_available' => true]);
+
+        return back()->with('success', 'Lit libéré avec succès.');
     }
 }

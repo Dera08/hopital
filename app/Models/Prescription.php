@@ -23,6 +23,8 @@ class Prescription extends Model
         'signature_hash',
         'allergy_checked',
         'status',
+        'is_visible_to_patient',
+        'category',
     ];
 
     protected $casts = [
@@ -41,6 +43,11 @@ class Prescription extends Model
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'doctor_id');
+    }
+
+    public function hospital(): BelongsTo
+    {
+        return $this->belongsTo(Hospital::class);
     }
 
     // Relation pour les items (si vous utilisez une table de détails séparée)

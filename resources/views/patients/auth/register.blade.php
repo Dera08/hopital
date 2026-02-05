@@ -139,7 +139,7 @@
                         class="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200 shadow-lg">
                         Créer mon compte
                     </button>
-                    <a href="{{ route('patient.login') }}"
+                    <a href="{{ route('login') }}"
                         class="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-semibold hover:bg-gray-300 transition duration-200 text-center">
                         Annuler
                     </a>
@@ -150,7 +150,7 @@
             <div class="mt-6 text-center">
                 <p class="text-sm text-gray-600">
                     Vous avez déjà un compte ? 
-                    <a href="{{ route('patient.login') }}" class="text-blue-600 font-semibold hover:text-blue-800">
+                    <a href="{{ route('login') }}" class="text-blue-600 font-semibold hover:text-blue-800">
                         Se connecter
                     </a>
                 </p>
@@ -159,7 +159,7 @@
             <!-- Lien retour -->
             <div class="mt-4 text-center">
                 <p class="text-sm text-gray-600">
-                    <a href="{{ route('select.portal') }}" class="text-blue-600 font-semibold hover:text-blue-800">
+                    <a href="{{ route('select-portal') }}" class="text-blue-600 font-semibold hover:text-blue-800">
                         <i class="fas fa-arrow-left mr-1"></i>
                         Retour à la sélection de portail
                     </a>

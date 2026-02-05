@@ -66,7 +66,8 @@ class Admission extends Model
         'patient_ipu',       // Clé sur PatientVital
         'patient_id',        // Clé sur Admission
         'ipu'                // Clé sur Patient
-    )->withoutGlobalScopes()->where('patient_vitals.hospital_id', $this->hospital_id)->latest('created_at');
+    )->withoutGlobalScopes()
+     ->latest('patient_vitals.created_at');
 }
 
     // --- Scopes (Raccourcis de requêtes) ---

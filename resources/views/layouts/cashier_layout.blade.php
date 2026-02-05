@@ -60,11 +60,88 @@
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
         }
+        /* Hide non-printable elements */
+        @media print {
+            aside, header, footer, .no-print {
+                display: none !important;
+            }
+            main {
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+            }
+            body {
+                background: white !important;
+            }
+        }
     </style>
 
     @stack('styles')
+    <style>
+        #global-loader {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 font-sans antialiased">
+<body x-data="{ 
+    sidebarOpen: true, 
+    mobileMenuOpen: false, 
+    showClosingModal: false,
+    closingLoading: false,
+    isClosed: false,
+    closingData: { cash_total: 0, mobile_total: 0 },
+    
+    async openClosingModal() {
+        this.closingLoading = true;
+        this.showClosingModal = true;
+        try {
+            const res = await fetch('{{ route('cashier.closing.totals') }}');
+            this.closingData = await res.json();
+            this.isClosed = this.closingData.is_closed;
+        } catch (e) { 
+            console.error('Error fetching totals:', e);
+            this.closingData = { cash_total: 0, mobile_total: 0 };
+        }
+        this.closingLoading = false;
+    },
+
+    async confirmClosing() {
+        if (this.isClosed) return;
+        this.closingLoading = true;
+        try {
+            const res = await fetch('{{ route('cashier.transfer.store') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
+                }
+            });
+            const data = await res.json();
+            if (data.success) {
+                this.isClosed = true;
+                this.showClosingModal = false;
+                alert(data.message);
+            } else {
+                alert(data.message);
+            }
+        } catch (e) { console.error('Error confirming closing:', e); }
+        this.closingLoading = false;
+    }
+}" x-init="
+    fetch('{{ route('cashier.closing.totals') }}')
+        .then(res => res.json())
+        .then(data => { isClosed = data.is_closed; })
+" class="bg-gray-100 font-sans antialiased">
 
     <header class="bg-white shadow-sm border-b border-gray-200 z-30">
         <div class="flex items-center justify-between px-6 py-4">
@@ -140,7 +217,7 @@
         </div>
     </header>
 
-    <div x-data="{ sidebarOpen: true, mobileMenuOpen: false }" class="flex h-screen overflow-hidden">
+    <div class="flex h-screen overflow-hidden">
 
         <aside
             :class="sidebarOpen ? 'w-64' : 'w-20'"
@@ -177,6 +254,11 @@
                     <span x-show="sidebarOpen" class="font-semibold">Rendez-vous</span>
                 </a>
 
+                <a href="{{ route('cashier.walk-in.index') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('cashier.walk-in.*') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <span x-show="sidebarOpen" class="font-semibold">Sans RDV</span>
+                </a>
+
                 <a href="{{ route('cashier.payments.index') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('payments.*') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                     <span x-show="sidebarOpen" class="font-semibold">Paiements</span>
@@ -191,6 +273,15 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                     <span x-show="sidebarOpen" class="font-semibold">Patients</span>
                 </a>
+
+                <button @click="openClosingModal()" 
+                        :disabled="isClosed"
+                        :class="isClosed ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'text-orange-400 hover:bg-orange-500/10 hover:text-orange-300'"
+                        class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group border border-dashed border-orange-500/20 mt-4">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    <span x-show="sidebarOpen" class="font-black text-xs uppercase tracking-widest">Fermer la Caisse</span>
+                    <i x-show="isClosed && sidebarOpen" class="fas fa-check-circle ml-auto text-[10px]"></i>
+                </button>
 
                 <div class="pt-4 pb-2">
                     <p x-show="sidebarOpen" class="px-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Paramètres</p>
@@ -257,5 +348,99 @@
     </footer>
 
     @stack('scripts')
+    
+    {{-- Modal de Clôture de Caisse --}}
+    <div x-show="showClosingModal" 
+         x-cloak
+         class="fixed inset-0 bg-gray-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100">
+        
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto custom-scrollbar" @click.away="showClosingModal = false">
+            <div class="bg-orange-500 p-6 sm:p-8 text-white relative">
+                <div class="absolute top-4 right-4 text-white/50 hover:text-white cursor-pointer" @click="showClosingModal = false">
+                    <i class="fas fa-times text-xl"></i>
+                </div>
+                <div class="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
+                    <i class="fas fa-vault text-2xl"></i>
+                </div>
+                <h3 class="text-xl sm:text-2xl font-black leading-tight">Voulez-vous clôturer votre journée ?</h3>
+                <p class="text-orange-100 text-xs sm:text-sm mt-2 font-medium">Cette action générera une demande de versement vers l'administration.</p>
+            </div>
+
+            <div class="p-6 sm:p-8 space-y-4 sm:space-y-6">
+                {{-- Loader --}}
+                <div x-show="closingLoading" class="flex flex-col items-center py-10">
+                    <div class="w-12 h-12 border-4 border-orange-100 border-t-orange-500 rounded-full animate-spin"></div>
+                    <p class="text-xs font-black text-gray-400 uppercase tracking-widest mt-4">Calcul des flux...</p>
+                </div>
+
+                <div x-show="!closingLoading" class="space-y-3 sm:space-y-4">
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <div class="w-9 h-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center text-sm">
+                                <i class="fas fa-money-bill-wave"></i>
+                            </div>
+                            <span class="text-[10px] sm:text-xs font-black text-gray-500 uppercase">Espèces</span>
+                        </div>
+                        <span class="text-base sm:text-lg font-black text-gray-900" x-text="new Intl.NumberFormat().format(closingData.cash_total) + ' FCFA'"></span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <div class="w-9 h-9 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-sm">
+                                <i class="fas fa-mobile-alt"></i>
+                            </div>
+                            <span class="text-[10px] sm:text-xs font-black text-gray-500 uppercase">M. Money</span>
+                        </div>
+                        <span class="text-base sm:text-lg font-black text-gray-900" x-text="new Intl.NumberFormat().format(closingData.mobile_total) + ' FCFA'"></span>
+                    </div>
+
+                    @auth
+                    <div class="pt-2 sm:pt-4">
+                        <button @click="confirmClosing()" 
+                                :disabled="isClosed"
+                                class="w-full py-3.5 sm:py-4 bg-gray-900 text-white rounded-2xl font-black text-[12px] sm:text-sm uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-gray-200 flex items-center justify-center gap-3">
+                            <i class="fas fa-check-circle"></i>
+                            Confirmer et Terminer
+                        </button>
+                        <p class="text-center text-[10px] text-gray-400 font-bold uppercase mt-4 tracking-tighter">
+                            Opérateur : {{ Auth::user()->name }} · {{ now()->format('H:i') }}
+                        </p>
+                    </div>
+                    @endauth
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Global Loading Overlay --}}
+    <div id="global-loader">
+        <div class="relative w-24 h-24 mb-4">
+            <div class="absolute inset-0 border-4 border-blue-100 rounded-full"></div>
+            <div class="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+            <div class="absolute inset-0 flex items-center justify-center">
+                <i class="fas fa-cash-register text-2xl text-blue-600"></i>
+            </div>
+        </div>
+        <p class="text-gray-900 font-black uppercase tracking-widest text-sm animate-pulse">Traitement en cours...</p>
+        <p class="text-gray-500 text-xs mt-2 italic">Veuillez patienter un instant</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loader = document.getElementById('global-loader');
+            
+            // Show loader on ALL form submissions
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function() {
+                    // Don't show for search-only forms if any, but safer to show everywhere for a cashier
+                    loader.style.display = 'flex';
+                });
+            });
+        });
+    </script>
 </body>
 </html>

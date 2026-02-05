@@ -74,9 +74,10 @@ class PrestationController extends Controller
 {
     $hospitalId = Auth::user()->hospital_id;
 
-    // 1. Récupérer les services pour le menu déroulant "Service associé"
+    // 1. Récupérer les services MEDICAUX/PRODUCTEURS pour le menu déroulant
     $services = \App\Models\Service::where('hospital_id', $hospitalId)
         ->where('is_active', true)
+        ->where('is_caisse', false) // Uniquement les producteurs
         ->orderBy('name')
         ->get();
 
@@ -169,6 +170,7 @@ class PrestationController extends Controller
 
         $services = Service::where('hospital_id', Auth::user()->hospital_id)
             ->where('is_active', true)
+            ->where('is_caisse', false)
             ->orderBy('name')
             ->get();
 

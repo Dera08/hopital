@@ -83,6 +83,8 @@
                                 <option value="admin" {{ old('role') == 'admin' ? 'selected' : '' }}>Administrateur</option>
                                 <option value="doctor" {{ old('role') == 'doctor' ? 'selected' : '' }}>Médecin</option>
                                 <option value="nurse" {{ old('role') == 'nurse' ? 'selected' : '' }}>Infirmier</option>
+                                <option value="lab_technician" {{ old('role') == 'lab_technician' ? 'selected' : '' }}>Technicien de Laboratoire</option>
+                                <option value="doctor_lab" {{ old('role') == 'doctor_lab' ? 'selected' : '' }}>Médecin Biologiste</option>
                                 <option value="administrative" {{ old('role') == 'administrative' ? 'selected' : '' }}>Administratif</option>
                             </select>
                             @error('role')
@@ -91,14 +93,62 @@
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Service</label>
-                            <select name="service_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                                <option value="">Sélectionner un service...</option>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Pôle Hospitalier *</label>
+                            <select id="poleSelector" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-slate-50 font-bold">
+                                <option value="">Choisir un pôle...</option>
+                                <option value="medical">🏥 Pôle de Soins (Médical)</option>
+                                <option value="technical">🔬 Pôle Technique (Diagnostic)</option>
+                                <option value="support">💳 Pôle de Caisse (Support)</option>
+                            </select>
+                            <p class="mt-1 text-[10px] text-blue-600 font-medium italic">Sélectionnez d'abord le pôle pour voir les services correspondants.</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Service Affecté *</label>
+                            <select name="service_id" id="serviceSelector" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed">
+                                <option value="" data-pole="all">Sélectionner un service...</option>
                                 @foreach($services as $service)
-                                <option value="{{ $service->id }}" {{ old('service_id') == $service->id ? 'selected' : '' }}>{{ $service->name }}</option>
+                                <option value="{{ $service->id }}" data-pole="{{ $service->type }}" {{ old('service_id') == $service->id ? 'selected' : '' }} class="hidden">
+                                    {{ $service->name }}
+                                </option>
                                 @endforeach
                             </select>
                         </div>
+
+                        <script>
+                            document.addEventListener('DOMContentLoaded', function() {
+                                const poleSelector = document.getElementById('poleSelector');
+                                const serviceSelector = document.getElementById('serviceSelector');
+                                const options = serviceSelector.querySelectorAll('option:not([data-pole="all"])');
+
+                                function filterServices(selectedPole) {
+                                    let matchFound = false;
+                                    options.forEach(option => {
+                                        if (option.dataset.pole === selectedPole) {
+                                            option.classList.remove('hidden');
+                                            option.disabled = false;
+                                            matchFound = true;
+                                        } else {
+                                            option.classList.add('hidden');
+                                            option.disabled = true;
+                                            if(option.selected) serviceSelector.value = '';
+                                        }
+                                    });
+                                    
+                                    serviceSelector.disabled = !selectedPole;
+                                    if(!selectedPole) serviceSelector.value = '';
+                                }
+
+                                poleSelector.addEventListener('change', function() {
+                                    filterServices(this.value);
+                                });
+
+                                // Au chargement si old value
+                                if(poleSelector.value) {
+                                    filterServices(poleSelector.value);
+                                }
+                            });
+                        </script>
 
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Numéro d'enregistrement</label>

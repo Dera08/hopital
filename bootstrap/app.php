@@ -26,20 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
    ->withMiddleware(function (Middleware $middleware) {
         // Redirection intelligente corrigée
-        $middleware->redirectGuestsTo(function ($request) {
-            // ÉTAPE A : Si l'utilisateur est DÉJÀ sur la page login ou register, on ne redirige PAS
-            if ($request->is('portal/login') || $request->is('portal/register')) {
-                return null;
-            }
-
-            // ÉTAPE B : Si on demande une page du portail sans être connecté
-            if ($request->is('portal/*') || $request->is('portal')) {
-                return route('patient.login');
-            }
-
-            // ÉTAPE C : Par défaut pour le staff
-            return route('login');
-        });
+        $middleware->redirectGuestsTo(fn () => route('login'));
 
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,

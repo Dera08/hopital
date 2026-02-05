@@ -599,13 +599,13 @@
             </div>
 
             <div class="relative z-10 space-y-5">
-                <a href="{{ route('patient.login') }}" class="portal-btn group block bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-5 rounded-2xl font-bold text-center hover:from-blue-600 hover:to-blue-700 transform hover:scale-105 hover:-translate-y-1 transition-all duration-300 shadow-lg hover:shadow-2xl border border-blue-400/20">
+                <a href="{{ route('login') }}" class="portal-btn group block bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-5 rounded-2xl font-bold text-center hover:from-blue-600 hover:to-blue-700 transform hover:scale-105 hover:-translate-y-1 transition-all duration-300 shadow-lg hover:shadow-2xl border border-blue-400/20">
                     <div class="flex items-center justify-center">
                         <i class="fas fa-user-injured mr-4 text-xl group-hover:animate-bounce"></i>
                         <span class="text-lg">Portail Patient</span>
                     </div>
                 </a>
-                <a href="{{ route('external.login') }}" class="portal-btn group block bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-5 rounded-2xl font-bold text-center hover:from-green-600 hover:to-green-700 transform hover:scale-105 hover:-translate-y-1 transition-all duration-300 shadow-lg hover:shadow-2xl border border-green-400/20">
+                <a href="{{ route('login') }}" class="portal-btn group block bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-5 rounded-2xl font-bold text-center hover:from-green-600 hover:to-green-700 transform hover:scale-105 hover:-translate-y-1 transition-all duration-300 shadow-lg hover:shadow-2xl border border-green-400/20">
                     <div class="flex items-center justify-center">
                         <i class="fas fa-stethoscope mr-4 text-xl group-hover:animate-pulse"></i>
                         <span class="text-lg">Portail Médecine Externes</span>

@@ -6,9 +6,9 @@
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
         <h2 class="text-3xl md:text-4xl font-black text-gray-800 tracking-tight">Facture #{{ $invoice->invoice_number }}</h2>
         <div class="flex gap-3">
-            <button onclick="window.print()" class="bg-blue-600 text-white px-6 py-4 rounded-2xl shadow-xl shadow-blue-200 hover:bg-blue-700 flex items-center gap-3 font-black transition-all">
+            <a href="{{ route('cashier.invoices.print', $invoice->id) }}" target="_blank" class="bg-blue-600 text-white px-6 py-4 rounded-2xl shadow-xl shadow-blue-200 hover:bg-blue-700 flex items-center gap-3 font-black transition-all">
                 <i class="fas fa-print"></i> Imprimer
-            </button>
+            </a>
             <a href="{{ route('cashier.appointments.index') }}" class="bg-gray-600 text-white px-6 py-4 rounded-2xl shadow-xl shadow-gray-200 hover:bg-gray-700 flex items-center gap-3 font-black transition-all">
                 <i class="fas fa-arrow-left"></i> Retour
             </a>
@@ -22,9 +22,9 @@
             <div>
                 <h3 class="text-xl font-black text-gray-800 mb-4">Informations Patient</h3>
                 <div class="space-y-2">
-                    <p class="text-gray-600"><strong>Nom:</strong> {{ $invoice->patient->name }}</p>
-                    <p class="text-gray-600"><strong>Téléphone:</strong> {{ $invoice->patient->phone ?? 'N/A' }}</p>
-                    <p class="text-gray-600"><strong>Email:</strong> {{ $invoice->patient->email ?? 'N/A' }}</p>
+                    <p class="text-gray-600"><strong>Nom:</strong> {{ $invoice->patient?->name ?? 'Patient Supprimé' }}</p>
+                    <p class="text-gray-600"><strong>Téléphone:</strong> {{ $invoice->patient?->phone ?? 'N/A' }}</p>
+                    <p class="text-gray-600"><strong>Email:</strong> {{ $invoice->patient?->email ?? 'N/A' }}</p>
                 </div>
             </div>
             <div>
@@ -117,11 +117,5 @@
     </div>
 </div>
 
-<style>
-@media print {
-    .no-print { display: none !important; }
-    body { background: white !important; }
-    .bg-gray-50 { background: white !important; }
-}
-</style>
+
 @endsection
