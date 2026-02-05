@@ -318,7 +318,7 @@ Route::middleware(['auth', 'active_user'])->group(function () {
 
         // SIMULATION PAIEMENT (DEV)
         Route::get('/payment/simulation/{id}', [CashierController::class, 'simulatePayment'])->name('simulation.payment');
-        Route::match(['get', 'post'], '/payment/simulation/{id}/validate', [CashierController::class, 'processSimulation'])->name('simulation.payment.validate');
+        Route::post('/payment/simulation/{id}/validate', [CashierController::class, 'processSimulation'])->name('simulation.payment.validate');
     });
 
     // Profil & Paramètres
@@ -362,7 +362,6 @@ Route::middleware(['auth', 'active_user'])->group(function () {
         Route::get('/admin/finance', [App\Http\Controllers\Admin\AdminFinanceController::class, 'index'])->name('admin.finance.index');
         Route::get('/admin/finance/daily', [App\Http\Controllers\Admin\AdminFinanceController::class, 'dailyDetails'])->name('admin.finance.daily');
         Route::get('/admin/finance/treasury', [App\Http\Controllers\Admin\AdminFinanceController::class, 'treasuryDetails'])->name('admin.finance.treasury');
-        Route::get('/admin/finance/export', [App\Http\Controllers\Admin\AdminFinanceController::class, 'exportInvoices'])->name('admin.finance.export');
         Route::post('/admin/finance/confirm/{id}', [App\Http\Controllers\Admin\AdminFinanceController::class, 'confirmTransfer'])->name('admin.finance.confirm');
     });
 

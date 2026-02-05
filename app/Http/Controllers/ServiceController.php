@@ -24,22 +24,12 @@ class ServiceController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'code' => 'required|string|max:10|unique:services,code',
-            'type' => 'required|in:medical,support,technical',
-            'consultation_price' => 'nullable|numeric|min:0',
-            'icon' => 'nullable|string',
-            'color' => 'nullable|string',
-            'location' => 'nullable|string',
             'description' => 'nullable|string',
         ]);
 
         Service::create([
             'name' => $request->name,
             'code' => $request->code,
-            'type' => $request->type,
-            'consultation_price' => $request->consultation_price ?? 0,
-            'icon' => $request->icon ?? 'bi-hospital',
-            'color' => $request->color ?? '#3b82f6',
-            'location' => $request->location,
             'description' => $request->description,
             'hospital_id' => Auth::user()->hospital_id,
             'is_active' => true,

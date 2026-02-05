@@ -233,7 +233,6 @@ if ($user->role === 'admin' || $user->role === 'super_admin') {
     {
         return Appointment::with(['patient', 'doctor', 'service'])
             ->whereDate('appointment_datetime', today())
-            ->whereIn('status', ['confirmed', 'scheduled', 'paid', 'completed'])
             ->when($user->isDoctor(), function($query) use ($user) {
                 return $query->where('doctor_id', $user->id);
             })
