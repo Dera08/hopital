@@ -14,7 +14,8 @@
         </div>
 
         {{-- Cartes de statistiques --}}
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border-l-8 border-green-500 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Recettes</p>
                     <div class="mt-1">
@@ -24,6 +25,16 @@
                 </div>
                 <div class="p-4 bg-green-50 rounded-xl text-green-600"><i class="fas fa-wallet text-2xl"></i></div>
             </div>
+            
+            <div class="bg-white p-6 rounded-2xl shadow-sm border-l-8 border-purple-500 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Assurance (Aujourd'hui)</p>
+                    <p class="text-2xl font-black text-purple-600 mt-1">{{ number_format($stats['today_insurance'], 0, ',', ' ') }} F</p>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase mt-1">Montant à recouvrer</p>
+                </div>
+                <div class="p-4 bg-purple-50 rounded-xl text-purple-600"><i class="fas fa-shield-alt text-2xl"></i></div>
+            </div>
+
             <div class="bg-white p-6 rounded-2xl shadow-sm border-l-8 border-blue-500 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Actes Payés</p>
@@ -31,6 +42,7 @@
                 </div>
                 <div class="p-4 bg-blue-50 rounded-xl text-blue-600"><i class="fas fa-check-double text-2xl"></i></div>
             </div>
+            
             <div class="bg-white p-6 rounded-2xl shadow-sm border-l-8 border-orange-500 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">En Attente</p>

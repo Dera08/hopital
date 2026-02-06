@@ -18,6 +18,9 @@ class WalkInConsultation extends Model
         'payment_method',
         'payment_operator',
         'cashier_id',
+        'insurance_name',
+        'insurance_card_number',
+        'insurance_coverage_rate',
     ];
 
     protected $casts = [

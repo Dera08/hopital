@@ -98,7 +98,7 @@
     showClosingModal: false,
     closingLoading: false,
     isClosed: false,
-    closingData: { cash_total: 0, mobile_total: 0 },
+    closingData: { cash_total: 0, mobile_total: 0, insurance_total: 0 },
     
     async openClosingModal() {
         this.closingLoading = true;
@@ -109,7 +109,7 @@
             this.isClosed = this.closingData.is_closed;
         } catch (e) { 
             console.error('Error fetching totals:', e);
-            this.closingData = { cash_total: 0, mobile_total: 0 };
+            this.closingData = { cash_total: 0, mobile_total: 0, insurance_total: 0 };
         }
         this.closingLoading = false;
     },
@@ -264,6 +264,12 @@
                     <span x-show="sidebarOpen" class="font-semibold">Paiements</span>
                 </a>
 
+                {{-- NEW INSURANCE ITEM --}}
+                <a href="{{ route('cashier.insurance-cards.index') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('cashier.insurance-cards.*') ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg>
+                    <span x-show="sidebarOpen" class="font-semibold">Cartes Assurance</span>
+                </a>
+
                 <a href="{{ route('cashier.invoices.index') }}" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group {{ request()->routeIs('invoices.*') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                     <span x-show="sidebarOpen" class="font-semibold">Factures</span>
@@ -395,6 +401,16 @@
                             <span class="text-[10px] sm:text-xs font-black text-gray-500 uppercase">M. Money</span>
                         </div>
                         <span class="text-base sm:text-lg font-black text-gray-900" x-text="new Intl.NumberFormat().format(closingData.mobile_total) + ' FCFA'"></span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-4 bg-purple-50 rounded-2xl border border-purple-100">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <div class="w-9 h-9 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center text-sm">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <span class="text-[10px] sm:text-xs font-black text-purple-500 uppercase">Assurance</span>
+                        </div>
+                        <span class="text-base sm:text-lg font-black text-purple-900" x-text="new Intl.NumberFormat().format(closingData.insurance_total) + ' FCFA'"></span>
                     </div>
 
                     @auth

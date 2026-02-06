@@ -129,13 +129,39 @@
                             <td class="px-8 py-5 text-center">
                                 @php
                                     $isMobile = str_contains(strtolower($payment->payment_method), 'mobile') || str_contains(strtolower($payment->payment_method), 'api');
+                                    $hasInsurance = $payment->insurance_name || $payment->insurance_coverage_rate > 0;
+                                    
+                                    $primaryColorClass = match(true) {
+                                        $isMobile => 'bg-orange-100 text-orange-700 border-orange-200',
+                                        default => 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                    };
                                 @endphp
-                                <span class="px-3 py-1.5 rounded-xl {{ $isMobile ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700' }} text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
-                                    {{ $payment->payment_method ?? 'Espèces' }}
-                                    @if($payment->payment_operator)
-                                        ({{ $payment->payment_operator }})
+                                <div class="flex flex-col items-center gap-1.5 min-w-[120px]">
+                                    {{-- Insurance Badge (Top) --}}
+                                    @if($hasInsurance)
+                                        <div class="flex flex-col items-center bg-purple-50 border border-purple-200 rounded-xl px-3 py-1.5 w-full shadow-sm animate-fadeIn">
+                                            <span class="text-[8px] font-black text-purple-700 uppercase tracking-widest flex items-center gap-1">
+                                                <i class="fas fa-shield-alt"></i> Assurance
+                                            </span>
+                                            <span class="text-[10px] font-bold text-purple-900 truncate max-w-[100px]">{{ $payment->insurance_name ?? $payment->payment_operator }}</span>
+                                            @if($payment->insurance_coverage_rate)
+                                                <span class="text-[8px] font-black bg-purple-600 text-white px-1.5 rounded-full mt-0.5">{{ $payment->insurance_coverage_rate }}%</span>
+                                            @endif
+                                        </div>
                                     @endif
-                                </span>
+
+                                    {{-- Co-payment Badge (Bottom) --}}
+                                    <div class="flex flex-col items-center {{ $primaryColorClass }} border rounded-xl px-3 py-1 {{ $hasInsurance ? 'w-full scale-90 opacity-80' : 'w-full py-2 shadow-sm' }} transition-all">
+                                        <span class="text-[9px] font-black uppercase tracking-widest whitespace-nowrap">
+                                            {{ $payment->payment_method ?? 'Espèces' }}
+                                        </span>
+                                        @if($isMobile && $payment->payment_operator)
+                                            <span class="text-[9px] font-bold uppercase mt-0.5 flex items-center gap-1">
+                                                <i class="fas fa-mobile-alt text-[8px]"></i> {{ $payment->payment_operator }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                </div>
                             </td>
                             <td class="px-8 py-5 text-right flex gap-2 justify-end">
                                 <a href="{{ route('cashier.invoices.show', $payment->id) }}" class="p-2.5 bg-gray-100 text-gray-500 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="Détails">

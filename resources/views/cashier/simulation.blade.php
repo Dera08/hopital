@@ -17,10 +17,26 @@
             <!-- Header -->
             <div class="bg-gradient-to-r from-blue-600 to-blue-700 p-8 text-center relative overflow-hidden">
                 <div class="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] animate-pulse"></div>
-                <h5 class="text-blue-100 text-xs font-bold uppercase tracking-widest mb-2 relative z-10">Total à Payer</h5>
+                
+                @if(isset($insuranceRate) && $insuranceRate > 0)
+                    <div class="relative z-10 mb-4 inline-flex items-center bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/30 text-white">
+                        <i class="fas fa-shield-alt mr-2"></i>
+                        <span class="text-xs font-black uppercase tracking-widest">Couverture Assurance NSIA : {{ $insuranceRate }}%</span>
+                    </div>
+                @endif
+
+                <h5 class="text-blue-100 text-xs font-bold uppercase tracking-widest mb-2 relative z-10">
+                    {{ (isset($insuranceRate) && $insuranceRate > 0) ? 'Reste à Payer (Co-paiement)' : 'Total à Payer' }}
+                </h5>
                 <div class="text-white text-5xl font-extrabold relative z-10 tracking-tight">
                     {{ number_format($amount ?? 0, 0, ',', ' ') }} <span class="text-2xl font-medium opacity-80">FCFA</span>
                 </div>
+
+                @if(isset($insuranceRate) && $insuranceRate > 0)
+                    <div class="relative z-10 mt-4 text-blue-200 text-[10px] font-bold uppercase tracking-widest opacity-60">
+                        Total Initial : {{ number_format($originalAmount ?? 0, 0, ',', ' ') }} FCFA
+                    </div>
+                @endif
             </div>
 
             <!-- Body -->

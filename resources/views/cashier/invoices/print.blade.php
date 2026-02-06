@@ -40,6 +40,9 @@
         <strong>Date :</strong> {{ $invoice->invoice_date->format('d/m/Y') }}<br>
         <strong>Patient :</strong> {{ $invoice->patient?->name ?? 'Patient Supprimé' }}<br>
         <strong>Méthode de paiement :</strong> {{ $invoice->payment_method ?? 'Espèces' }}
+        @if($invoice->insurance_coverage_rate > 0)
+            <br><strong>Assurance :</strong> {{ $invoice->insurance_name ?? $invoice->payment_operator }} ({{ $invoice->insurance_coverage_rate }}%)
+        @endif
     </div>
 
     <table>
@@ -66,9 +69,21 @@
     <div class="total-box">
         <div><strong>Sous-total :</strong> {{ number_format($invoice->subtotal, 0, ',', ' ') }} F</div>
         <div><strong>TVA (18%) :</strong> {{ number_format($invoice->tax, 0, ',', ' ') }} F</div>
-        <div style="font-size: 16px; font-weight: bold; margin-top: 10px;">
-            TOTAL À PAYER : {{ number_format($invoice->total, 0, ',', ' ') }} F CFA
+        <div style="font-size: 14px; font-weight: bold; margin-top: 5px; border-top: 1px solid #e5e7eb; padding-top: 5px;">
+            TOTAL FACTURÉ : {{ number_format($invoice->total, 0, ',', ' ') }} F
         </div>
+        @if($invoice->insurance_coverage_rate > 0)
+            @php
+                $insurancePart = ($invoice->total * $invoice->insurance_coverage_rate) / 100;
+                $patientPart = $invoice->total - $insurancePart;
+            @endphp
+            <div style="color: #7c3aed; font-size: 13px; margin-top: 5px;">
+                Portion Assurance ({{ $invoice->insurance_coverage_rate }}%) : - {{ number_format($insurancePart, 0, ',', ' ') }} F
+            </div>
+            <div style="font-size: 18px; font-weight: bold; margin-top: 10px; color: #059669; border-top: 2px solid #059669; padding-top: 10px;">
+                TOTAL ENCAISSÉ (PATIENT) : {{ number_format($patientPart, 0, ',', ' ') }} F CFA
+            </div>
+        @endif
     </div>
 
     <div class="footer">

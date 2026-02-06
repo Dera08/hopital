@@ -316,9 +316,14 @@
                     </h3>
                     <p class="text-blue-200 text-xs mt-1 ml-8">Enregistrement rapide d'un patient externe</p>
                 </div>
-                <button type="button" onclick="document.getElementById('createWalkInModal').close()" class="text-white/70 hover:text-white transition rounded-lg p-2 hover:bg-white/10">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
+                <div class="flex items-center space-x-3">
+                    <button type="submit" class="md:hidden px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-bold rounded-lg shadow-sm transition">
+                        <i class="fas fa-check mr-1"></i> Valider
+                    </button>
+                    <button type="button" onclick="document.getElementById('createWalkInModal').close()" class="text-white/70 hover:text-white transition rounded-lg p-2 hover:bg-white/10">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
             </div>
 
             <div class="flex-1 overflow-y-auto p-8">
@@ -454,6 +459,21 @@
                                         <i class="fas fa-check text-[8px]"></i>
                                     </div>
                                 </label>
+
+                                <label class="cursor-pointer group relative">
+                                    <input type="radio" name="payment_mode" value="assurance" class="peer sr-only" onchange="toggleMobileMoneyFields()">
+                                    <div class="p-4 text-center border-2 border-gray-200 rounded-xl peer-checked:bg-purple-50 peer-checked:border-purple-500 peer-checked:text-purple-800 hover:border-purple-200 transition-all flex flex-col items-center justify-center h-24 shadow-sm">
+                                        <i class="fas fa-id-card mb-2 text-2xl text-gray-400 group-hover:text-purple-500 peer-checked:text-purple-600 transition-colors"></i>
+                                        <span class="font-bold text-sm">Assurance</span>
+                                        <span class="text-xs text-gray-500 peer-checked:text-purple-600">Tiers Payant</span>
+                                    </div>
+                                    <div class="absolute top-2 right-2 w-4 h-4 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs opacity-0 peer-checked:opacity-100 transition-opacity">
+                                        <i class="fas fa-check text-[8px]"></i>
+                                    </div>
+                                </label>
+                             </div>
+                             
+                             <!-- Mobile Money Fields (Hidden by default) -->
                              </div>
                              
                              <!-- Mobile Money Fields (Hidden by default) -->
@@ -479,6 +499,40 @@
                                      <span>Le patient recevra une notification de paiement sur son téléphone. La consultation sera enregistrée après confirmation du paiement.</span>
                                  </p>
                              </div>
+
+                             <!-- Insurance Fields (Hidden by default) -->
+                             <div id="insuranceFields" class="hidden mt-4 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                                 <div class="space-y-4">
+                                     <div>
+                                         <label class="block text-sm font-semibold text-gray-800 mb-2">Compagnie d'Assurance <span class="text-red-500">*</span></label>
+                                         <input type="text" name="insurance_name" id="insuranceName" placeholder="Ex: MCI, SUNU, NSIA..." class="w-full rounded-lg border-gray-300 focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50 transition shadow-sm h-11 uppercase">
+                                     </div>
+                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                         <div>
+                                             <label class="block text-sm font-semibold text-gray-800 mb-2">N° Carte / Matricule <span class="text-red-500">*</span></label>
+                                             <input type="text" name="insurance_card_number" id="insuranceCardNumber" placeholder="N° Carte" class="w-full rounded-lg border-gray-300 focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50 transition shadow-sm h-11">
+                                         </div>
+                                         <div>
+                                             <label class="block text-sm font-semibold text-gray-800 mb-2">Taux de Couverture (%) <span class="text-red-500">*</span></label>
+                                             <input type="number" name="insurance_coverage_rate" id="insuranceCoverageRate" min="0" max="100" placeholder="Ex: 80" class="w-full rounded-lg border-gray-300 focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50 transition shadow-sm h-11">
+                                         </div>
+                                     </div>
+                                 </div>
+                                 
+                                 <!-- Co-payment Display -->
+                                 <div id="coPaymentDisplay" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                                     <div class="flex justify-between items-center">
+                                         <div>
+                                             <p class="text-xs font-bold text-red-600 uppercase">Reste à payer (Ticket Modérateur)</p>
+                                             <p class="text-sm text-red-500">Montant à encaisser maintenant</p>
+                                         </div>
+                                         <div class="text-right">
+                                             <p class="text-2xl font-black text-red-700" id="patientPartDisplay">0 FCFA</p>
+                                             <input type="hidden" name="patient_part" id="patientPartInput">
+                                         </div>
+                                     </div>
+                                 </div>
+                             </div>
                         </div>
 
                         <div class="space-y-4 mt-6">
@@ -491,7 +545,7 @@
                                 @foreach($prestations as $prestation)
                                     <label class="relative flex items-center p-4 bg-white border border-gray-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all group select-none">
                                         <div class="flex items-center h-5">
-                                            <input type="checkbox" name="prestation_ids[]" value="{{ $prestation->id }}" class="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 transition">
+                                            <input type="checkbox" name="prestation_ids[]" value="{{ $prestation->id }}" data-price="{{ $prestation->price }}" class="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 transition">
                                         </div>
                                         <div class="ml-3 flex-1 flex flex-col">
                                             <span class="text-sm font-semibold text-gray-800 group-hover:text-indigo-700 transition-colors">{{ $prestation->name }}</span>
@@ -505,7 +559,7 @@
                 </div>
             </div>
 
-            <div class="bg-gray-50 px-8 py-5 flex items-center justify-end space-x-4 border-t border-gray-200 sticky bottom-0 z-10 flex-shrink-0">
+            <div class="bg-gray-50 px-8 py-5 flex items-center justify-end space-x-4 border-t border-gray-200 sticky bottom-0 z-30 flex-shrink-0">
                 <button type="button" onclick="document.getElementById('createWalkInModal').close()" class="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium shadow-sm transition">
                     Annuler
                 </button>
@@ -543,7 +597,7 @@
                             <label class="block text-sm font-bold text-gray-800 mb-3 px-1">Choisir le moyen de paiement</label>
                             <div class="grid grid-cols-2 gap-3">
                                 <label class="cursor-pointer group relative">
-                                    <input type="radio" name="payment_method" value="Espèces" class="peer sr-only" checked onchange="toggleMobileOperators(false)">
+                                    <input type="radio" name="payment_method" value="Espèces" class="peer sr-only" checked onchange="toggleMobileOperators(false); toggleInsuranceOperators(false)">
                                     <div class="p-4 text-center border-2 border-gray-200 rounded-xl peer-checked:bg-green-50 peer-checked:border-green-500 peer-checked:text-green-800 hover:border-green-200 transition-all flex flex-col items-center justify-center h-24 shadow-sm">
                                         <i class="fas fa-money-bill-wave mb-2 text-2xl text-gray-400 group-hover:text-green-500 peer-checked:text-green-600 transition-colors"></i>
                                         <span class="font-bold text-sm">Espèces</span>
@@ -553,7 +607,7 @@
                                     </div>
                                 </label>
                                 <label class="cursor-pointer group relative">
-                                    <input type="radio" name="payment_method" value="Carte bancaire" class="peer sr-only" onchange="toggleMobileOperators(false)">
+                                    <input type="radio" name="payment_method" value="Carte bancaire" class="peer sr-only" onchange="toggleMobileOperators(false); toggleInsuranceOperators(false)">
                                     <div class="p-4 text-center border-2 border-gray-200 rounded-xl peer-checked:bg-blue-50 peer-checked:border-blue-500 peer-checked:text-blue-800 hover:border-blue-200 transition-all flex flex-col items-center justify-center h-24 shadow-sm">
                                         <i class="fas fa-credit-card mb-2 text-2xl text-gray-400 group-hover:text-blue-500 peer-checked:text-blue-600 transition-colors"></i>
                                         <span class="font-bold text-sm">Carte</span>
@@ -563,7 +617,7 @@
                                     </div>
                                 </label>
                                  <label class="cursor-pointer group relative">
-                                    <input type="radio" name="payment_method" value="Mobile Money" class="peer sr-only" onchange="toggleMobileOperators(true)">
+                                    <input type="radio" name="payment_method" value="Mobile Money" class="peer sr-only" onchange="toggleMobileOperators(true); toggleInsuranceOperators(false)">
                                     <div class="p-4 text-center border-2 border-gray-200 rounded-xl peer-checked:bg-orange-50 peer-checked:border-orange-500 peer-checked:text-orange-800 hover:border-green-200 transition-all flex flex-col items-center justify-center h-24 shadow-sm">
                                         <i class="fas fa-mobile-alt mb-2 text-2xl text-gray-400 group-hover:text-orange-500 peer-checked:text-orange-600 transition-colors"></i>
                                         <span class="font-bold text-sm">Mobile</span>
@@ -573,16 +627,37 @@
                                     </div>
                                 </label>
                                  <label class="cursor-pointer group relative">
-                                    <input type="radio" name="payment_method" value="Autre" class="peer sr-only" onchange="toggleMobileOperators(false)">
-                                    <div class="p-4 text-center border-2 border-gray-200 rounded-xl peer-checked:bg-purple-50 peer-checked:border-purple-500 peer-checked:text-purple-800 hover:border-green-200 transition-all flex flex-col items-center justify-center h-24 shadow-sm">
-                                        <i class="fas fa-ellipsis-h mb-2 text-2xl text-gray-400 group-hover:text-purple-500 peer-checked:text-purple-600 transition-colors"></i>
-                                        <span class="font-bold text-sm">Autre</span>
+                                    <input type="radio" name="payment_method" value="Assurance" class="peer sr-only" onchange="toggleMobileOperators(false); toggleInsuranceOperators(true)">
+                                    <div class="p-4 text-center border-2 border-gray-200 rounded-xl peer-checked:bg-purple-50 peer-checked:border-purple-500 peer-checked:text-purple-800 hover:border-purple-200 transition-all flex flex-col items-center justify-center h-24 shadow-sm">
+                                        <i class="fas fa-id-card mb-2 text-2xl text-gray-400 group-hover:text-purple-500 peer-checked:text-purple-600 transition-colors"></i>
+                                        <span class="font-bold text-sm">Assurance</span>
                                     </div>
                                     <div class="absolute top-2 right-2 w-4 h-4 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs opacity-0 peer-checked:opacity-100 transition-opacity">
                                         <i class="fas fa-check text-[8px]"></i>
                                     </div>
                                 </label>
                             </div>
+                        </div>
+
+
+                        <!-- Insurance Payment Details -->
+                        <div id="paymentInsuranceDetails" class="hidden mb-6 p-5 bg-purple-50 rounded-2xl border border-purple-200 animate-fadeIn">
+                             <div class="space-y-4">
+                                     <div>
+                                         <label class="block text-sm font-semibold text-gray-800 mb-2">Compagnie d'Assurance <span class="text-red-500">*</span></label>
+                                         <input type="text" id="paymentInsuranceName" name="insurance_name" placeholder="Ex: MCI, SUNU, NSIA..." class="w-full rounded-lg border-gray-300 focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50 transition shadow-sm h-11 uppercase">
+                                     </div>
+                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                         <div>
+                                             <label class="block text-sm font-semibold text-gray-800 mb-2">N° Carte / Matricule <span class="text-red-500">*</span></label>
+                                             <input type="text" id="paymentInsuranceCard" name="insurance_card_number" placeholder="N° Carte" class="w-full rounded-lg border-gray-300 focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50 transition shadow-sm h-11">
+                                         </div>
+                                         <div>
+                                             <label class="block text-sm font-semibold text-gray-800 mb-2">Taux (%) <span class="text-red-500">*</span></label>
+                                             <input type="number" id="paymentInsuranceRate" name="insurance_coverage_rate" min="0" max="100" placeholder="Ex: 80" class="w-full rounded-lg border-gray-300 focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50 transition shadow-sm h-11">
+                                         </div>
+                                     </div>
+                                 </div>
                         </div>
 
                         <!-- Mobile Payment Details (MTN, Orange, Moov, Wave) -->
@@ -645,20 +720,108 @@
         }
     }
 
+    function toggleInsuranceOperators(show) {
+        const details = document.getElementById('paymentInsuranceDetails');
+        const insuranceInputs = details.querySelectorAll('input');
+        
+        if (show) {
+            details.classList.remove('hidden');
+            insuranceInputs.forEach(input => input.required = true);
+        } else {
+            details.classList.add('hidden');
+            insuranceInputs.forEach(input => input.required = false);
+        }
+    }
+
     function toggleMobileMoneyFields() {
         const paymentMode = document.querySelector('input[name="payment_mode"]:checked').value;
         const mobileMoneyFields = document.getElementById('mobileMoneyFields');
         const mobileOperator = document.getElementById('mobileOperator');
         const mobileNumber = document.getElementById('mobileNumber');
         
+        const insuranceFields = document.getElementById('insuranceFields');
+        const insuranceName = document.getElementById('insuranceName');
+        const insuranceCardNumber = document.getElementById('insuranceCardNumber');
+        const insuranceCoverageRate = document.getElementById('insuranceCoverageRate');
+        const coPaymentDisplay = document.getElementById('coPaymentDisplay');
+        
+        // Reset everything first
+        mobileMoneyFields.classList.add('hidden');
+        mobileOperator.required = false;
+        mobileNumber.required = false;
+        
+        insuranceFields.classList.add('hidden');
+        insuranceName.required = false;
+        insuranceCardNumber.required = false;
+        insuranceCoverageRate.required = false;
+        coPaymentDisplay.classList.add('hidden');
+
         if (paymentMode === 'mobile_money') {
             mobileMoneyFields.classList.remove('hidden');
             mobileOperator.required = true;
             mobileNumber.required = true;
+        } else if (paymentMode === 'assurance') {
+            insuranceFields.classList.remove('hidden');
+            insuranceName.required = true;
+            insuranceCardNumber.required = true;
+            insuranceCoverageRate.required = true;
+            
+            // Add listeners for calculation
+            insuranceCoverageRate.addEventListener('input', calculateCoPayment);
+            document.getElementById('serviceSelect').addEventListener('change', calculateCoPayment);
+            document.getElementById('consultationTypeSelect').addEventListener('change', calculateCoPayment);
+            document.querySelectorAll('input[name="prestation_ids[]"]').forEach(cb => {
+                cb.addEventListener('change', calculateCoPayment);
+            });
+        }
+    }
+
+    function calculateCoPayment() {
+        const rateInput = document.getElementById('insuranceCoverageRate');
+        const rate = parseInt(rateInput.value) || 0;
+        const coPaymentDisplay = document.getElementById('coPaymentDisplay');
+        const patientPartDisplay = document.getElementById('patientPartDisplay');
+        
+        if (rate >= 100 || rate < 0) {
+            coPaymentDisplay.classList.add('hidden');
+            return;
+        }
+
+        // Calculate Total Amount
+        let total = 0;
+        
+        // Consultation Price
+        const consultationSelect = document.getElementById('consultationTypeSelect');
+        const selectedOption = consultationSelect.options[consultationSelect.selectedIndex];
+        if (selectedOption && selectedOption.dataset.price) {
+            total += parseInt(selectedOption.dataset.price);
+        }
+
+        // Extra Prestations
+        document.querySelectorAll('input[name="prestation_ids[]"]:checked').forEach(cb => {
+            // Find the price label or data attribute? 
+            // In the HTML we rendered the price in text. Let's assume we need to parse or store it.
+            // Simplified: We need the price. 
+            // Better to add data-price to the checkbox inputs in a separate edit.
+            // For now, let's try to grab it from the sibling span text.
+            // Structure: input -> div -> div -> input | div -> span -> span (price)
+            // Actually, let's just make sure we add data-price to checkboxes first.
+        });
+        
+        // For now, let's implement parsing logic if data-price is missing, but best to add it.
+        // Assuming checkboxes will have data-price added.
+        document.querySelectorAll('input[name="prestation_ids[]"]:checked').forEach(cb => {
+             total += parseInt(cb.dataset.price || 0);
+        });
+
+        if (total > 0) {
+            const insurancePart = Math.round(total * (rate / 100));
+            const patientPart = total - insurancePart;
+            
+            patientPartDisplay.textContent = new Intl.NumberFormat('fr-FR').format(patientPart) + ' FCFA';
+            coPaymentDisplay.classList.remove('hidden');
         } else {
-            mobileMoneyFields.classList.add('hidden');
-            mobileOperator.required = false;
-            mobileNumber.required = false;
+             coPaymentDisplay.classList.add('hidden');
         }
     }
 
@@ -752,11 +915,76 @@
             .then(html => {
                 content.innerHTML = html;
                 form.action = actionUrl;
+                
+                // Auto-fill insurance details if present
+                // Auto-fill insurance details if present
+                const storedName = document.getElementById('storedInsuranceName');
+                if (storedName) {
+                    // Activate Cash by default (since insurance is already "paid" or recorded)
+                    const cashRadio = document.querySelector('input[name="payment_method"][value="Espèces"]');
+                    const assuranceRadio = document.querySelector('input[name="payment_method"][value="Assurance"]');
+                    
+                    if (cashRadio) {
+                        cashRadio.checked = true;
+                        cashRadio.dispatchEvent(new Event('change'));
+                        
+                        // Disable Assurance to prevent re-selection
+                        if (assuranceRadio) {
+                             assuranceRadio.parentElement.style.opacity = '0.5';
+                             assuranceRadio.parentElement.style.pointerEvents = 'none';
+                             assuranceRadio.disabled = true;
+                        }
+
+                        // Fill fields (even if hidden)
+                        const nameInput = document.getElementById('paymentInsuranceName');
+                        const cardInput = document.getElementById('paymentInsuranceCard');
+                        const rateInput = document.getElementById('paymentInsuranceRate');
+
+                        if(nameInput) nameInput.value = storedName.value;
+                        if(cardInput) cardInput.value = document.getElementById('storedInsuranceCard').value;
+                        if(rateInput) rateInput.value = document.getElementById('storedInsuranceRate').value;
+                        
+                        // Trigger calculation immediately
+                        calculateModalCoPayment();
+                    }
+                }
             })
             .catch(error => {
                 content.innerHTML = '<div class="bg-red-50 p-4 rounded-lg text-red-600 text-center border border-red-200"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur de chargement des détails. Réessayez.</div>';
                 console.error(error);
             });
+    }
+
+    function calculateModalCoPayment() {
+        const rateInput = document.getElementById('paymentInsuranceRate');
+        const modalFullTotalEl = document.getElementById('modalFullTotal');
+        
+        if (!rateInput || !modalFullTotalEl) return;
+
+        const rate = parseInt(rateInput.value) || 0;
+        const fullTotal = parseInt(modalFullTotalEl.dataset.value) || 0;
+        
+        const fullTotalRow = document.getElementById('fullTotalRow');
+        const breakdown = document.getElementById('coPaymentBreakdown');
+        
+        const insurancePartDisplay = document.getElementById('modalInsurancePart');
+        const patientPartDisplay = document.getElementById('modalPatientPart');
+        const coverageRateDisplay = document.getElementById('modalCoverageRate');
+
+        if (rate > 0 && rate <= 100) {
+            const insurancePart = Math.round(fullTotal * (rate / 100));
+            const patientPart = fullTotal - insurancePart;
+
+            if (breakdown) breakdown.classList.remove('hidden');
+            if (fullTotalRow) fullTotalRow.classList.add('hidden'); // Hide the standard total row
+
+            if (insurancePartDisplay) insurancePartDisplay.textContent = new Intl.NumberFormat('fr-FR').format(insurancePart) + ' FCFA';
+            if (patientPartDisplay) patientPartDisplay.textContent = new Intl.NumberFormat('fr-FR').format(patientPart) + ' FCFA';
+            if (coverageRateDisplay) coverageRateDisplay.textContent = rate;
+        } else {
+            if (breakdown) breakdown.classList.add('hidden');
+            if (fullTotalRow) fullTotalRow.classList.remove('hidden');
+        }
     }
 
     function closePaymentModal() {

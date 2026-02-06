@@ -305,6 +305,7 @@ Route::middleware(['auth', 'active_user'])->group(function () {
         Route::get('/cashier/lab-requests/{labRequest}/details', [CashierController::class, 'getLabRequestDetails'])->name('cashier.lab.details'); // New Route
         Route::post('/cashier/walk-in/{consultation}/validate-payment', [CashierController::class, 'validateWalkInPayment'])->name('cashier.walk-in.validate-payment');
         Route::get('/cashier/payments', [CashierController::class, 'payments'])->name('cashier.payments.index');
+        Route::get('/cashier/insurance-cards', [CashierController::class, 'insuranceCards'])->name('cashier.insurance-cards.index');
         Route::post('/cashier/lab-requests/{labRequest}/pay', [CashierController::class, 'payLabRequest'])->name('cashier.lab.pay'); // New Route
         Route::get('/cashier/invoices', [CashierController::class, 'invoices'])->name('cashier.invoices.index');
         Route::get('/cashier/patients', [CashierController::class, 'patients'])->name('cashier.patients.index');
@@ -363,6 +364,11 @@ Route::middleware(['auth', 'active_user'])->group(function () {
         Route::get('/admin/finance/daily', [App\Http\Controllers\Admin\AdminFinanceController::class, 'dailyDetails'])->name('admin.finance.daily');
         Route::get('/admin/finance/treasury', [App\Http\Controllers\Admin\AdminFinanceController::class, 'treasuryDetails'])->name('admin.finance.treasury');
         Route::post('/admin/finance/confirm/{id}', [App\Http\Controllers\Admin\AdminFinanceController::class, 'confirmTransfer'])->name('admin.finance.confirm');
+        Route::get('/admin/finance/export', [App\Http\Controllers\Admin\AdminFinanceController::class, 'exportInvoices'])->name('admin.finance.export');
+        Route::get('/admin/finance/pending', [App\Http\Controllers\Admin\AdminFinanceController::class, 'pendingInvoices'])->name('admin.finance.pending');
+        Route::post('/admin/finance/settle-insurance/{invoice}', [App\Http\Controllers\Admin\AdminFinanceController::class, 'settleInsuranceInvoice'])->name('admin.finance.settle');
+        Route::get('/admin/finance/bordereau', [App\Http\Controllers\Admin\AdminFinanceController::class, 'exportInsuranceBordereau'])->name('admin.finance.bordereau');
+        Route::get('/admin/finance/audit', [App\Http\Controllers\Admin\AdminFinanceController::class, 'auditLogs'])->name('admin.finance.audit');
     });
 
     // CASHIER CLOSING ROUTES

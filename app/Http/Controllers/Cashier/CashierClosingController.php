@@ -50,16 +50,40 @@ class CashierClosingController extends Controller
             ->where('status', 'paid')
             ->get();
 
-        $cashTotal = $dailyInvoices->whereIn('payment_method', ['cash', 'Espèces', 'espèces'])->sum('total');
-        $mobileTotal = $dailyInvoices->whereIn('payment_method', ['mobile_money', 'Mobile Money', 'MoMo', 'api'])->sum('total');
+        $cashTotal = 0;
+        $mobileTotal = 0;
+        $insuranceTotal = 0;
+
+        foreach ($dailyInvoices as $invoice) {
+            $fullTotal = $invoice->total;
+            $insurancePart = ($fullTotal * ($invoice->insurance_coverage_rate ?? 0)) / 100;
+            $patientPart = $fullTotal - $insurancePart;
+
+            $insuranceTotal += $insurancePart;
+
+            $isCash = in_array(strtolower($invoice->payment_method), ['cash', 'espèces', 'especes']);
+            $isMobile = in_array(strtolower($invoice->payment_method), ['mobile_money', 'mobile money', 'momo', 'api']);
+
+            if ($isCash) {
+                $cashTotal += $patientPart;
+            } elseif ($isMobile) {
+                $mobileTotal += $patientPart;
+            } else {
+                // If it's 100% insurance or some other method, and not explicitly cash/mobile
+                // it might have been already handleded via insurancePart if it's insurance
+                // but any remaining patient part that isn't cash/mobile would be "unaccounted" here
+                // but usually it's one of the two if it's a co-payment.
+            }
+        }
 
         $existingTransfer = FundTransfer::where('cashier_id', $user->id)
             ->whereDate('created_at', $today)
             ->first();
 
         return response()->json([
-            'cash_total' => $cashTotal,
-            'mobile_total' => $mobileTotal,
+            'cash_total' => (int)$cashTotal,
+            'mobile_total' => (int)$mobileTotal,
+            'insurance_total' => (int)$insuranceTotal,
             'is_closed' => !!$existingTransfer,
             'status' => $existingTransfer ? $existingTransfer->status : null
         ]);
@@ -79,16 +103,22 @@ class CashierClosingController extends Controller
             return response()->json(['success' => false, 'message' => 'Caisse déjà clôturée pour aujourd\'hui.']);
         }
 
-        // Calculate actual cash total for security
-        $cashAmount = Invoice::where('cashier_id', $user->id)
+        // Calculate actual cash total (Patient portion only)
+        $dailyInvoices = Invoice::where('cashier_id', $user->id)
             ->whereDate('created_at', $today)
             ->where('status', 'paid')
             ->whereIn('payment_method', ['cash', 'Espèces', 'espèces'])
-            ->sum('total');
+            ->get();
+
+        $cashAmount = 0;
+        foreach ($dailyInvoices as $inv) {
+            $insurancePart = ($inv->total * ($inv->insurance_coverage_rate ?? 0)) / 100;
+            $cashAmount += ($inv->total - $insurancePart);
+        }
 
         FundTransfer::create([
             'cashier_id' => $user->id,
-            'amount' => $cashAmount,
+            'amount' => (int)$cashAmount,
             'type' => 'cash',
             'status' => 'pending',
             'transfer_date' => now(),

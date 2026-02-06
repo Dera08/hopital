@@ -117,83 +117,195 @@ class AdminFinanceController extends Controller
     }
 
     public function dailyDetails(Request $request)
-    {
-        $today = Carbon::today();
-        $method = $request->query('method');
+{
+    $today = Carbon::today();
+    $method = $request->query('method');
+    $caisse = $request->query('caisse');
+    
+    // 1. Fetch ALL invoices for today (paid, pending, partial)
+    $allInvoices = Invoice::whereDate('created_at', $today)
+        ->with(['patient', 'service', 'cashier'])
+        ->get();
+
+    // 2. Statistics calculation
+    $statsByMethod = [
+        'cash' => ['total' => 0, 'count' => 0, 'label' => 'Espèces'],
+        'mobile' => ['total' => 0, 'count' => 0, 'label' => 'Mobile Money'],
+        'card' => ['total' => 0, 'count' => 0, 'label' => 'Carte Bancaire'],
+        'insurance' => ['total' => 0, 'count' => 0, 'label' => 'Assurance'],
+    ];
+
+    $totals = [
+        'paid' => 0,
+        'pending' => 0,
+        'pending_breakdown' => [
+            'cash' => 0,
+            'mobile' => 0,
+            'card' => 0,
+        ]
+    ];
+
+    $statsByCaisse = [
+        'accueil' => ['total' => 0, 'cashiers' => collect()],
+        'labo' => ['total' => 0, 'cashiers' => collect()],
+        'urgence' => ['total' => 0, 'cashiers' => collect()],
+    ];
+
+    foreach ($allInvoices as $inv) {
+        $m = strtolower((string)$inv->payment_method);
+        $isCash = in_array($m, ['cash', 'espèces', 'especes']);
+        $isMobile = in_array($m, ['mobile_money', 'mobile money', 'momo']);
+        $isCard = in_array($m, ['card', 'carte', 'visa', 'mastercard', 'carte bancaire']);
         
-        $query = Invoice::whereDate('created_at', $today)
-            ->where('status', 'paid')
-            ->with(['patient', 'service', 'cashier']);
+        $insurancePart = ($inv->total * ($inv->insurance_coverage_rate ?? 0)) / 100;
+        $patientPart = $inv->total - $insurancePart;
 
-        if ($method) {
-            $query->where(function($q) use ($method) {
-                if ($method === 'cash') {
-                    $q->where('payment_method', 'cash')->orWhere('payment_method', 'Espèces')->orWhere('payment_method', 'espèces');
-                } elseif ($method === 'mobile') {
-                    $q->where('payment_method', 'mobile_money')->orWhere('payment_method', 'Mobile Money')->orWhere('payment_method', 'MoMo');
-                } else {
-                    $q->where('payment_method', $method);
-                }
-            });
+        // 1. Logique du Réalisé (Argent effectivement encaissé)
+        // Patient part is realized IF invoice is paid
+        if ($inv->status === 'paid') {
+            $totals['paid'] += $patientPart;
+            if ($isCash) $statsByMethod['cash']['total'] += $patientPart;
+            elseif ($isMobile) $statsByMethod['mobile']['total'] += $patientPart;
+            elseif ($isCard) $statsByMethod['card']['total'] += $patientPart;
+        } else {
+            // Patient part is pending IF invoice is unpaid
+            $totals['pending'] += $patientPart;
+            if ($isCash) $totals['pending_breakdown']['cash'] += $patientPart;
+            elseif ($isMobile) $totals['pending_breakdown']['mobile'] += $patientPart;
+            elseif ($isCard) $totals['pending_breakdown']['card'] += $patientPart;
         }
 
-        $invoices = $query->latest()->get();
-
-        // 1. Stats by Method (Normalized for display)
-        $rawStats = Invoice::select('payment_method', DB::raw('sum(total) as total'), DB::raw('count(*) as count'))
-            ->whereDate('created_at', $today)
-            ->where('status', 'paid')
-            ->groupBy('payment_method')
-            ->get();
-
-        $statsByMethod = [
-            'cash' => ['total' => 0, 'count' => 0, 'label' => 'Espèces'],
-            'mobile' => ['total' => 0, 'count' => 0, 'label' => 'Mobile Money'],
-        ];
-
-        foreach ($rawStats as $stat) {
-            $m = strtolower($stat->payment_method);
-            if (in_array($m, ['cash', 'espèces', 'especes'])) {
-                $statsByMethod['cash']['total'] += $stat->total;
-                $statsByMethod['cash']['count'] += $stat->count;
-            } elseif (in_array($m, ['mobile_money', 'mobile money', 'momo'])) {
-                $statsByMethod['mobile']['total'] += $stat->total;
-                $statsByMethod['mobile']['count'] += $stat->count;
+        // Insurance part is realized ONLY if recovered
+        if ($insurancePart > 0) {
+            if ($inv->insurance_settlement_status === 'recovered') {
+                $totals['paid'] += $insurancePart;
+                $statsByMethod['insurance']['total'] += $insurancePart;
+            } else {
+                $totals['pending'] += $insurancePart;
+                // Note: User didn't ask for insurance breakdown in pending, 
+                // but it's part of the global pending total.
             }
+            $statsByMethod['insurance']['count']++; // Still count the record for stats
         }
 
-        $statsByMethod = collect($statsByMethod);
-
-        // 2. Stats by Caisse (Accueil, Labo, Urgence)
-        // We categorize based on the service's caisse_type
-        $statsByCaisse = [
-            'accueil' => ['total' => 0, 'cashiers' => collect()],
-            'labo' => ['total' => 0, 'cashiers' => collect()],
-            'urgence' => ['total' => 0, 'cashiers' => collect()],
-        ];
-
-        foreach ($invoices as $inv) {
-            $type = 'accueil';
-            if ($inv->service) {
-                if ($inv->service->caisse_type === 'labo' || strpos(strtolower($inv->service->name), 'labo') !== false) {
-                    $type = 'labo';
-                } elseif ($inv->service->caisse_type === 'urgence' || strpos(strtolower($inv->service->name), 'urgence') !== false) {
-                    $type = 'urgence';
-                }
-            }
-            
-            $statsByCaisse[$type]['total'] += $inv->total;
-            if ($inv->cashier) {
-                $statsByCaisse[$type]['cashiers']->put($inv->cashier->id, $inv->cashier->name);
-            }
+        // Performance par Caisse calculation (respects filters)
+        $type = 'accueil';
+        if ($inv->service) {
+            $sName = strtolower($inv->service->name);
+            $cType = strtolower((string)$inv->service->caisse_type);
+            if ($cType === 'labo' || strpos($sName, 'labo') !== false) $type = 'labo';
+            elseif ($cType === 'urgence' || strpos($sName, 'urgence') !== false) $type = 'urgence';
         }
 
-        return view('admin.finance.daily', compact('invoices', 'statsByMethod', 'statsByCaisse', 'method'));
+        $addAmount = 0;
+        if (!$method) {
+            // Dans la vue globale, on montre ce qui est EN CAISSE (Part Patient Payée + Part Assur Récupérée)
+            $addAmount = ($inv->status === 'paid' ? $patientPart : 0) + ($inv->insurance_settlement_status === 'recovered' ? $insurancePart : 0);
+        } elseif ($method === 'cash' && $isCash && $inv->status === 'paid') {
+            $addAmount = $patientPart;
+        } elseif ($method === 'mobile' && $isMobile && $inv->status === 'paid') {
+            $addAmount = $patientPart;
+        } elseif ($method === 'card' && $isCard && $inv->status === 'paid') {
+            $addAmount = $patientPart;
+        } elseif ($method === 'insurance' && $insurancePart > 0 && $inv->insurance_settlement_status === 'recovered') {
+            $addAmount = $insurancePart;
+        }
+        $statsByCaisse[$type]['total'] += $addAmount;
+
+        if ($inv->cashier) {
+            $statsByCaisse[$type]['cashiers']->put($inv->cashier->id, $inv->cashier->name);
+        }
+        
+        // Update method counts
+        if ($inv->status === 'paid') {
+            if ($isCash) $statsByMethod['cash']['count']++;
+            elseif ($isMobile) $statsByMethod['mobile']['count']++;
+            elseif ($isCard) $statsByMethod['card']['count']++;
+        }
     }
 
+    // 3. Filtering for the journal list
+    $invoices = $allInvoices;
+
+    if ($method) {
+        $invoices = $invoices->filter(function($inv) use ($method) {
+            $m = strtolower((string)$inv->payment_method);
+            if ($method === 'cash') return in_array($m, ['cash', 'espèces', 'especes']);
+            if ($method === 'mobile') return in_array($m, ['mobile_money', 'mobile money', 'momo']);
+            if ($method === 'card') return in_array($m, ['card', 'carte', 'visa', 'mastercard', 'carte bancaire']);
+            if ($method === 'insurance') return ($inv->insurance_coverage_rate ?? 0) > 0;
+            return false;
+        });
+    }
+
+    if ($caisse) {
+        $invoices = $invoices->filter(function($inv) use ($caisse) {
+            $type = 'accueil';
+            if ($inv->service) {
+                $sName = strtolower($inv->service->name);
+                $cType = strtolower((string)$inv->service->caisse_type);
+                if ($cType === 'labo' || strpos($sName, 'labo') !== false) $type = 'labo';
+                elseif ($cType === 'urgence' || strpos($sName, 'urgence') !== false) $type = 'urgence';
+            }
+            return $type === $caisse;
+        });
+    }
+
+    $invoices = $invoices->sortByDesc('created_at');
+    $statsByOperator = $this->calculateOperatorStats($today);
+
+    // 4. Calculate confirmed transfers for today to show what reached the treasury
+    $confirmedTransfersTotal = FundTransfer::whereDate('created_at', $today)
+        ->where('status', 'confirmed')
+        ->sum('amount');
+
+    return view('admin.finance.daily', [
+        'invoices' => $invoices,
+        'statsByMethod' => collect($statsByMethod),
+        'statsByOperator' => collect($statsByOperator),
+        'statsByCaisse' => $statsByCaisse,
+        'totals' => (object)$totals,
+        'confirmedTransfersTotal' => $confirmedTransfersTotal,
+        'method' => $method,
+        'caisse' => $caisse
+    ]);
+}
+
+private function calculateOperatorStats($today)
+{
+    $mobileStatsRaw = Invoice::select('payment_operator', DB::raw('sum(total) as total'), DB::raw('count(*) as count'))
+        ->whereDate('created_at', $today)
+        ->where('status', 'paid')
+        ->where(function($q) {
+            $q->where('payment_method', 'mobile_money')->orWhere('payment_method', 'Mobile Money')->orWhere('payment_method', 'MoMo');
+        })
+        ->groupBy('payment_operator')
+        ->get();
+
+    $stats = [
+        'orange' => ['total' => 0, 'count' => 0, 'label' => 'Orange Money', 'color' => 'orange'],
+        'mtn' => ['total' => 0, 'count' => 0, 'label' => 'MTN Mobile Money', 'color' => 'yellow'],
+        'wave' => ['total' => 0, 'count' => 0, 'label' => 'Wave', 'color' => 'blue'],
+        'moov' => ['total' => 0, 'count' => 0, 'label' => 'Moov Mony', 'color' => 'teal'],
+        'other' => ['total' => 0, 'count' => 0, 'label' => 'Autre', 'color' => 'gray'],
+    ];
+
+    foreach ($mobileStatsRaw as $stat) {
+        $op = strtolower((string)$stat->payment_operator);
+        $key = 'other';
+        if (strpos($op, 'orange') !== false) $key = 'orange';
+        elseif (strpos($op, 'mtn') !== false) $key = 'mtn';
+        elseif (strpos($op, 'wave') !== false) $key = 'wave';
+        elseif (strpos($op, 'moov') !== false) $key = 'moov';
+        
+        $stats[$key]['total'] += $stat->total;
+        $stats[$key]['count'] += $stat->count;
+    }
+    return $stats;
+}
     public function treasuryDetails()
     {
-        // 1. Mobile Money (Direct API)
+        // 1. Mobile Money (Liquid/Direct)
         $mobileInvoices = Invoice::where('status', 'paid')
             ->where(function($q) {
                 $q->where('payment_method', 'mobile_money')
@@ -204,22 +316,71 @@ class AdminFinanceController extends Controller
             ->latest()
             ->paginate(15, ['*'], 'mobile_page');
 
-        // 2. Confirmed Cash Transfers
-        $cashTransfers = FundTransfer::where('status', 'confirmed')
-            ->with(['cashier'])
+        // 2. Cash Transfers (Physical funds moving to treasury)
+        $cashTransfers = FundTransfer::with(['cashier'])
             ->latest()
             ->paginate(15, ['*'], 'cash_page');
 
-        $totalMobile = Invoice::where('status', 'paid')
+        // 3. Insurance Receivables (Owed money)
+        $insuranceInvoices = Invoice::where('status', 'paid')
+            ->where('insurance_settlement_status', 'pending')
+            ->where(function($q) {
+                $q->whereNotNull('insurance_name')
+                  ->orWhere('insurance_coverage_rate', '>', 0);
+            })
+            ->with(['patient', 'service'])
+            ->latest()
+            ->paginate(15, ['*'], 'insurance_page');
+
+        // --- CALCULATIONS ---
+        
+        // A. Mobile/Card funds are considered realized liquidity
+        $totalMobileAndCard = Invoice::where('status', 'paid')
             ->where(function($q) {
                 $q->where('payment_method', 'mobile_money')
                   ->orWhere('payment_method', 'Mobile Money')
-                  ->orWhere('payment_method', 'MoMo');
-            })->sum('total');
+                  ->orWhere('payment_method', 'MoMo')
+                  ->orWhere('payment_method', 'card')
+                  ->orWhere('payment_method', 'carte')
+                  ->orWhere('payment_method', 'carte bancaire');
+            })->get()->sum(function($inv) {
+                return $inv->total - ($inv->total * ($inv->insurance_coverage_rate ?? 0) / 100);
+            });
 
-        $totalCash = FundTransfer::where('status', 'confirmed')->sum('amount');
+        // B. Confirmed Cash (Actually in Treasury)
+        $totalConfirmedCash = FundTransfer::where('status', 'confirmed')->sum('amount');
 
-        return view('admin.finance.treasury', compact('mobileInvoices', 'cashTransfers', 'totalMobile', 'totalCash'));
+        // C. Cashier Holdings (Cash collected by cashiers but NOT yet confirmed/transferred)
+        // Total cash collected minus Total cash confirmed
+        $totalCashCollectedRaw = Invoice::where('status', 'paid')
+            ->where(function($q) {
+                $q->where('payment_method', 'cash')
+                  ->orWhere('payment_method', 'espèces')
+                  ->orWhere('payment_method', 'especes');
+            })->get()->sum(function($inv) {
+                return $inv->total - ($inv->total * ($inv->insurance_coverage_rate ?? 0) / 100);
+            });
+        
+        $cashierHoldings = $totalCashCollectedRaw - $totalConfirmedCash;
+        if ($cashierHoldings < 0) $cashierHoldings = 0;
+
+        // D. Insurance Receivables
+        $totalInsurance = Invoice::where('status', 'paid')
+            ->where('insurance_settlement_status', 'pending')
+            ->get()
+            ->sum(function($invoice) {
+                return ($invoice->total * ($invoice->insurance_coverage_rate ?? 0)) / 100;
+            });
+
+        return view('admin.finance.treasury', compact(
+            'mobileInvoices', 
+            'cashTransfers', 
+            'insuranceInvoices', 
+            'totalMobileAndCard', 
+            'totalConfirmedCash', 
+            'cashierHoldings',
+            'totalInsurance'
+        ));
     }
 
     private function getCaisseStats($type, $date)
@@ -332,5 +493,136 @@ class AdminFinanceController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    public function pendingInvoices()
+    {
+        // 1. Standard Pending Invoices (Patient hasn't paid)
+        $patientPendings = Invoice::where('status', 'pending')
+            ->orWhere('status', 'partial')
+            ->with(['patient', 'service'])
+            ->latest()
+            ->get();
+
+        // 2. Insurance Pending Settlements (Insurance hasn't reimbursed)
+        $insurancePendings = Invoice::where('insurance_settlement_status', 'pending')
+            ->with(['patient', 'service'])
+            ->latest()
+            ->get();
+
+        // 3. Insurance Recovered Settlements (History)
+        $insuranceRecovered = Invoice::where('insurance_settlement_status', 'recovered')
+            ->with(['patient', 'service'])
+            ->latest()
+            ->take(50)
+            ->get();
+
+        $totalPatientPending = $patientPendings->sum('total');
+        
+        $totalInsurancePending = $insurancePendings->sum(function($inv) {
+            return ($inv->total * ($inv->insurance_coverage_rate ?? 0)) / 100;
+        });
+
+        // Grouping by insurance for summary
+        $statsByInsurance = $insurancePendings->groupBy('insurance_name')->map(function($group) {
+            return [
+                'count' => $group->count(),
+                'total' => $group->sum(function($inv) {
+                    return ($inv->total * ($inv->insurance_coverage_rate ?? 0)) / 100;
+                })
+            ];
+        });
+
+        return view('admin.finance.pending', compact(
+            'patientPendings', 
+            'insurancePendings', 
+            'insuranceRecovered',
+            'statsByInsurance',
+            'totalPatientPending', 
+            'totalInsurancePending'
+        ));
+    }
+
+    /**
+     * Marquer une créance assurance comme recouvrée/payée
+     */
+    public function settleInsuranceInvoice(Invoice $invoice)
+    {
+        $invoice->update([
+            'insurance_settlement_status' => 'recovered',
+            'updated_at' => now()
+        ]);
+
+        return redirect()->back()->with('success', 'La créance assurance pour la facture ' . $invoice->invoice_number . ' a été marquée comme recouvrée.');
+    }
+
+    /**
+     * Générer un bordereau d'envoi pour une assurance spécifique (Export CSV)
+     */
+    public function exportInsuranceBordereau(Request $request)
+    {
+        $insuranceName = $request->query('insurance');
+        
+        $query = Invoice::where('insurance_settlement_status', 'pending')
+            ->with(['patient', 'service']);
+            
+        if ($insuranceName) {
+            $query->where('insurance_name', $insuranceName);
+        }
+
+        $invoices = $query->latest()->get();
+
+        $filename = "bordereau_assurance_" . ($insuranceName ?? 'global') . "_" . now()->format('Y-m-d') . ".csv";
+
+        $headers = [
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$filename",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        ];
+
+        $callback = function() use($invoices) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, ['Date', 'Facture', 'Patient', 'ID Assurance', 'Montant Total', 'Prise en Charge (%)', 'Part Assurance (CFA)']);
+
+            foreach ($invoices as $inv) {
+                $insurancePart = ($inv->total * ($inv->insurance_coverage_rate ?? 0)) / 100;
+                fputcsv($file, [
+                    $inv->created_at->format('d/m/Y'),
+                    $inv->invoice_number,
+                    $inv->patient->name ?? '?',
+                    $inv->insurance_card_number ?? '-',
+                    $inv->total,
+                    ($inv->insurance_coverage_rate ?? 0) . '%',
+                    $insurancePart
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    public function auditLogs(Request $request)
+    {
+        $query = Invoice::query()->with(['patient', 'cashier', 'service']);
+
+        if ($request->has('search')) {
+            $search = $request->get('search');
+            $query->where('invoice_number', 'like', "%{$search}%")
+                  ->orWhereHas('patient', function($q) use ($search) {
+                      $q->where('name', 'like', "%{$search}%");
+                  });
+        }
+
+        if ($request->has('date')) {
+            $query->whereDate('created_at', $request->get('date'));
+        }
+
+        $logs = $query->latest()->paginate(20);
+
+        return view('admin.finance.audit', compact('logs'));
     }
 }

@@ -29,14 +29,19 @@
                     <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-3">Mode de règlement</label>
                     <div class="grid grid-cols-2 gap-3">
                         <label class="relative flex flex-col items-center p-4 border-2 border-gray-100 rounded-2xl cursor-pointer hover:bg-gray-50 transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 group">
-                            <input type="radio" name="payment_method" value="Espèces" class="hidden" checked onchange="toggleMobileMoneyOptions(false)">
+                            <input type="radio" name="payment_method" value="Espèces" class="hidden" checked onchange="togglePaymentOptions('cash')">
                             <i class="fas fa-money-bill-wave text-xl mb-2 text-gray-400 group-has-[:checked]:text-blue-600"></i>
                             <span class="text-xs font-bold text-gray-600 group-has-[:checked]:text-blue-800">Espèces</span>
                         </label>
                         <label class="relative flex flex-col items-center p-4 border-2 border-gray-100 rounded-2xl cursor-pointer hover:bg-gray-50 transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 group">
-                            <input type="radio" name="payment_method" value="Mobile Money" class="hidden" onchange="toggleMobileMoneyOptions(true)">
+                            <input type="radio" name="payment_method" value="Mobile Money" class="hidden" onchange="togglePaymentOptions('mobile')">
                             <i class="fas fa-mobile-alt text-xl mb-2 text-gray-400 group-has-[:checked]:text-blue-600"></i>
                             <span class="text-xs font-bold text-gray-600 group-has-[:checked]:text-blue-800">Mobile Money</span>
+                        </label>
+                        <label class="relative flex flex-col items-center p-4 border-2 border-gray-100 rounded-2xl cursor-pointer hover:bg-gray-50 transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 group col-span-2">
+                            <input type="radio" name="payment_method" value="Assurance" class="hidden" onchange="togglePaymentOptions('insurance')">
+                            <i class="fas fa-id-card text-xl mb-2 text-gray-400 group-has-[:checked]:text-blue-600"></i>
+                            <span class="text-xs font-bold text-gray-600 group-has-[:checked]:text-blue-800">Carte d'Assurance</span>
                         </label>
                     </div>
                 </div>
@@ -67,6 +72,25 @@
                         <input type="text" name="mobile_number" placeholder="07xxxxxxxx" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none text-sm font-bold transition-all">
                     </div>
                 </div>
+
+                {{-- Options Assurance --}}
+                <div id="insuranceOptions" class="hidden space-y-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">Compagnie d'Assurance</label>
+                            <input type="text" name="insurance_name" placeholder="Ex: MCI, SUNU, NSIA..." class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none text-sm font-bold transition-all uppercase">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">N° Carte</label>
+                                <input type="text" name="insurance_card_number" placeholder="N° Carte / Matricule" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none text-sm font-bold transition-all">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">Taux (%)</label>
+                                <input type="number" name="insurance_coverage_rate" placeholder="Ex: 80" min="0" max="100" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none text-sm font-bold transition-all">
+                            </div>
+                        </div>
+                    </div>
 
                 <input type="hidden" name="amount_paid" id="hiddenAmount">
 
@@ -106,17 +130,29 @@
         modal.classList.remove('flex');
     }
 
-    function toggleMobileMoneyOptions(show) {
-        const options = document.getElementById('mobileMoneyOptions');
-        if (show) {
-            options.classList.remove('hidden');
-            // Make operator and number required if showing
+    function togglePaymentOptions(type) {
+        const mobileOptions = document.getElementById('mobileMoneyOptions');
+        const insuranceOptions = document.getElementById('insuranceOptions');
+        
+        // Reset requirements
+        document.querySelectorAll('input[name="mobile_operator"]').forEach(el => el.required = false);
+        document.querySelector('input[name="mobile_number"]').required = false;
+        document.querySelector('input[name="insurance_name"]').required = false;
+        document.querySelector('input[name="insurance_card_number"]').required = false;
+        document.querySelector('input[name="insurance_coverage_rate"]').required = false;
+
+        mobileOptions.classList.add('hidden');
+        insuranceOptions.classList.add('hidden');
+
+        if (type === 'mobile') {
+            mobileOptions.classList.remove('hidden');
             document.querySelectorAll('input[name="mobile_operator"]').forEach(el => el.required = true);
             document.querySelector('input[name="mobile_number"]').required = true;
-        } else {
-            options.classList.add('hidden');
-            document.querySelectorAll('input[name="mobile_operator"]').forEach(el => el.required = false);
-            document.querySelector('input[name="mobile_number"]').required = false;
+        } else if (type === 'insurance') {
+            insuranceOptions.classList.remove('hidden');
+            document.querySelector('input[name="insurance_name"]').required = true;
+            document.querySelector('input[name="insurance_card_number"]').required = true;
+            document.querySelector('input[name="insurance_coverage_rate"]').required = true;
         }
     }
 

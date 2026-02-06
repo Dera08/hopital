@@ -41,6 +41,15 @@
                         <p class="text-gray-600"><strong>Payée le:</strong> {{ $invoice->paid_at->format('d/m/Y H:i') }}</p>
                         <p class="text-gray-600"><strong>Méthode:</strong> {{ $invoice->payment_method }}</p>
                     @endif
+                    @if($invoice->insurance_name || $invoice->insurance_coverage_rate > 0)
+                        <div class="mt-2 p-2 bg-purple-50 rounded-lg border border-purple-100">
+                             <p class="text-purple-700 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                <i class="fas fa-shield-alt"></i> Assurance
+                             </p>
+                             <p class="text-gray-600 text-sm font-bold"><strong>Compagnie:</strong> {{ $invoice->insurance_name ?? $invoice->payment_operator }}</p>
+                             <p class="text-gray-600 text-sm"><strong>Couverture:</strong> {{ $invoice->insurance_coverage_rate }}%</p>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
@@ -100,9 +109,24 @@
                         <span class="font-bold text-gray-800">{{ number_format($invoice->tax, 0, ',', ' ') }} F</span>
                     </div>
                     <div class="flex justify-between border-t border-gray-300 pt-3">
-                        <span class="font-black text-lg text-gray-800">Total:</span>
+                        <span class="font-black text-lg text-gray-800">Total Facturé:</span>
                         <span class="font-black text-lg text-gray-800">{{ number_format($invoice->total, 0, ',', ' ') }} F</span>
                     </div>
+
+                    @if($invoice->insurance_coverage_rate > 0)
+                        @php
+                            $insurancePart = ($invoice->total * $invoice->insurance_coverage_rate) / 100;
+                            $patientPart = $invoice->total - $insurancePart;
+                        @endphp
+                        <div class="flex justify-between text-purple-700 font-bold">
+                            <span class="text-sm">Portion Assurance ({{ $invoice->insurance_coverage_rate }}%):</span>
+                            <span class="text-sm">- {{ number_format($insurancePart, 0, ',', ' ') }} F</span>
+                        </div>
+                        <div class="flex justify-between bg-emerald-50 p-3 rounded-xl border border-emerald-100 mt-2 shadow-sm">
+                            <span class="font-black text-emerald-800">TOTAL ENCAISSÉ (PATIENT):</span>
+                            <span class="font-black text-emerald-800 text-xl">{{ number_format($patientPart, 0, ',', ' ') }} F CFA</span>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>

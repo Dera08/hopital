@@ -35,6 +35,9 @@
     <div class="section">
         <strong>Date :</strong> {{ $invoice->invoice_date->format('d/m/Y') }}<br>
         <strong>Patient :</strong> {{ $invoice->patient?->name ?? 'Patient Supprimé' }}
+        @if($invoice->insurance_coverage_rate > 0)
+            <br><strong>Assurance :</strong> {{ $invoice->insurance_name ?? $invoice->payment_operator }} ({{ $invoice->insurance_coverage_rate }}%)
+        @endif
     </div>
 
     <table>
@@ -60,8 +63,27 @@
     </table>
 
     <div class="total-box">
-        <span style="font-size: 16px; font-weight: bold;">TOTAL À PAYER :</span>
-        <span style="font-size: 24px; font-weight: bold; color: #2563eb;">{{ number_format($total, 0, ',', ' ') }} F CFA</span>
+        <div style="margin-bottom: 5px;">
+            <span style="font-size: 14px; font-weight: bold;">TOTAL FACTURÉ :</span>
+            <span style="font-size: 14px; font-weight: bold;">{{ number_format($invoice->total, 0, ',', ' ') }} F</span>
+        </div>
+        
+        @if($invoice->insurance_coverage_rate > 0)
+            @php
+                $insurancePart = ($invoice->total * $invoice->insurance_coverage_rate) / 100;
+                $patientPart = $invoice->total - $insurancePart;
+            @endphp
+            <div style="color: #7c3aed; font-size: 12px; margin-bottom: 5px;">
+                Portion Assurance ({{ $invoice->insurance_coverage_rate }}%) : - {{ number_format($insurancePart, 0, ',', ' ') }} F
+            </div>
+            <div style="border-top: 1px solid #059669; padding-top: 5px;">
+                <span style="font-size: 16px; font-weight: bold; color: #059669;">TOTAL ENCAISSÉ (PATIENT) :</span>
+                <span style="font-size: 20px; font-weight: bold; color: #059669;">{{ number_format($patientPart, 0, ',', ' ') }} F CFA</span>
+            </div>
+        @else
+            <span style="font-size: 16px; font-weight: bold;">TOTAL À PAYER :</span>
+            <span style="font-size: 24px; font-weight: bold; color: #2563eb;">{{ number_format($invoice->total, 0, ',', ' ') }} F CFA</span>
+        @endif
     </div>
 
     <div class="footer">

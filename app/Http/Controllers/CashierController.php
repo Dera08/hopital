@@ -77,11 +77,16 @@ class CashierController extends Controller
         });
         $todayRevenue = $todayInvoices->sum('total');
 
+        $todayInsurance = $todayInvoices->sum(function($invoice) {
+            return ($invoice->total * ($invoice->insurance_coverage_rate ?? 0)) / 100;
+        });
+
         $stats = [
             'pending' => $pendingCount,
             'paid_total' => $paidCountTotal,
             'total_revenue' => $totalRevenue,
-            'today_revenue' => $todayRevenue
+            'today_revenue' => $todayRevenue,
+            'today_insurance' => $todayInsurance
         ];
 
         // Prepare Pending Payments List (Merged)
@@ -312,6 +317,28 @@ class CashierController extends Controller
             $tax = $subtotal * 0.18;
             $total = $subtotal + $tax;
 
+            // Handle Payment Operator (Mobile or Insurance)
+            $finalOperator = $paymentOperator;
+            $insuranceName = null;
+            $insuranceCard = null;
+            $insuranceRate = null;
+
+            // NEW: Pull insurance info from target if available (especially for deferred co-payments)
+            if ($type === 'walk-in' && isset($target->insurance_name)) {
+                $insuranceName = $target->insurance_name;
+                $insuranceCard = $target->insurance_card_number;
+                $insuranceRate = $target->insurance_coverage_rate;
+            }
+
+            if ($paymentMethod === 'Assurance') {
+                $insuranceName = request()->insurance_name ?? $insuranceName;
+                $insuranceCard = request()->insurance_card_number ?? $insuranceCard;
+                $insuranceRate = request()->insurance_coverage_rate ?? $insuranceRate;
+                $finalOperator = $insuranceName; // For backwards compatibility or if not Mobile
+            } elseif (!$finalOperator) {
+                $finalOperator = $target->payment_operator ?? null;
+            }
+
             // 2. Créer la facture
             $invoice = Invoice::create([
                 'hospital_id' => $hospitalId,
@@ -328,7 +355,11 @@ class CashierController extends Controller
                 'total' => $total,
                 'status' => 'paid',
                 'payment_method' => $paymentMethod,
-                'payment_operator' => $paymentOperator ?? $target->payment_operator ?? null,
+                'payment_operator' => $finalOperator,
+                'insurance_name' => $insuranceName,
+                'insurance_card_number' => $insuranceCard,
+                'insurance_coverage_rate' => $insuranceRate,
+                'insurance_settlement_status' => ($insuranceRate > 0) ? 'pending' : null,
                 'paid_at' => now(),
                 'cashier_id' => $user->id,
             ]);
@@ -631,9 +662,12 @@ class CashierController extends Controller
             'patient_email' => 'nullable|email',
             'service_id' => 'required|exists:services,id',
             'consultation_prestation_id' => 'required|exists:prestations,id',
-            'payment_mode' => 'required|in:cash,mobile_money',
+            'payment_mode' => 'required|in:cash,mobile_money,assurance',
             'mobile_operator' => 'required_if:payment_mode,mobile_money|nullable|in:mtn,orange,moov,wave',
             'mobile_number' => 'required_if:payment_mode,mobile_money|nullable|string',
+            'insurance_name' => 'required_if:payment_mode,assurance|nullable|string',
+            'insurance_card_number' => 'required_if:payment_mode,assurance|nullable|string',
+            'insurance_coverage_rate' => 'required_if:payment_mode,assurance|nullable|integer|min:0|max:100',
             'prestation_ids' => 'nullable|array',
             'prestation_ids.*' => 'exists:prestations,id',
         ]);
@@ -666,6 +700,9 @@ class CashierController extends Controller
             'status' => 'pending_payment',
             'consultation_datetime' => now(),
             'cashier_id' => auth()->id(),
+            'insurance_name' => $request->insurance_name,
+            'insurance_card_number' => $request->insurance_card_number,
+            'insurance_coverage_rate' => $request->insurance_coverage_rate,
         ]);
 
         // Attacher l'acte principal
@@ -695,18 +732,24 @@ class CashierController extends Controller
         }
 
         // Gérer le paiement
-        if ($request->payment_mode === 'mobile_money') {
-            return $this->initiateMobileMoneyPayment($request, $consultation, 'walk-in');
-        }
-
-        // Pour le cash, on valide immédiatement si c'est "Enregistrer et Encaisser"
-        try {
-            $this->executePayment($consultation, 'Espèces', 'walk-in', $request->mobile_operator);
-            return redirect()->route('cashier.walk-in.index')->with('success', 'Consultation créée et paiement en espèces validé !');
-        } catch (\Exception $e) {
-            return redirect()->route('cashier.walk-in.index')->with('success', 'Consultation créée mais le paiement a échoué : ' . $e->getMessage());
-        }
+    if ($request->payment_mode === 'mobile_money') {
+        return $this->initiateMobileMoneyPayment($request, $consultation, 'walk-in');
     }
+
+    // For Insurance, we defer the payment validation to the modal step
+    if ($request->payment_mode === 'assurance') {
+        return redirect()->route('cashier.walk-in.index')->with('success', 'Consultation créée. Veuillez procéder au paiement du Ticket Modérateur.');
+    }
+
+    $paymentMethod = 'Espèces';
+
+    // Pour le cash, on valide immédiatement si c'est "Enregistrer et Encaisser"
+    try {
+        $this->executePayment($consultation, $paymentMethod, 'walk-in', $request->mobile_operator);
+        return redirect()->route('cashier.walk-in.index')->with('success', 'Consultation créée et paiement validé !');
+    } catch (\Exception $e) {
+        return redirect()->route('cashier.walk-in.index')->with('success', 'Consultation créée mais le paiement a échoué : ' . $e->getMessage());
+    }    }
 
     /**
      * Récupérer les détails d'une consultation
@@ -808,6 +851,12 @@ class CashierController extends Controller
         $subtotal = collect($items)->sum('total');
         $tax = $subtotal * 0.18;
         $grandTotal = $subtotal + $tax;
+
+        // Deduct insurance if applicable (Co-payment)
+        if ($type === 'walk-in' && $target->insurance_coverage_rate > 0) {
+            $insurancePart = ($grandTotal * $target->insurance_coverage_rate) / 100;
+            $grandTotal = $grandTotal - $insurancePart;
+        }
 
         $paymentData = [
             'amount' => (int) $grandTotal,
@@ -927,6 +976,8 @@ class CashierController extends Controller
     {
         $target = null;
         $amount = 0;
+        $insuranceName = null;
+        $insuranceRate = 0;
 
         if (str_starts_with($transactionId, 'APT-')) {
             $target = \App\Models\Appointment::where('payment_transaction_id', $transactionId)->first();
@@ -938,18 +989,26 @@ class CashierController extends Controller
             $target = \App\Models\WalkInConsultation::where('payment_transaction_id', $transactionId)->first();
             if ($target) {
                 $amount = $target->prestations->sum('pivot.total') * 1.18;
+                $insuranceName = $target->insurance_name;
+                $insuranceRate = $target->insurance_coverage_rate;
             }
         } elseif (str_starts_with($transactionId, 'LAB-')) {
             $target = \App\Models\LabRequest::where('payment_transaction_id', $transactionId)->first();
             if ($target) {
                 $prestation = \App\Models\Prestation::where('name', $target->test_name)->first();
-                $amount = ($prestation ? $prestation->price : 5000) * 1.18;
+                $price = $prestation ? $prestation->price : 5000;
+                $amount = $price * 1.18;
             }
+        }
+
+        $originalAmount = $amount;
+        if ($insuranceRate > 0) {
+            $amount = $originalAmount * (1 - ($insuranceRate / 100));
         }
 
         $operator = $target->payment_operator ?? 'Mobile Money';
 
-        return view('cashier.simulation', compact('transactionId', 'amount', 'operator'));
+        return view('cashier.simulation', compact('transactionId', 'amount', 'operator', 'insuranceName', 'insuranceRate', 'originalAmount'));
     }
 
     public function processSimulation(Request $request, $transactionId)
@@ -1076,5 +1135,23 @@ class CashierController extends Controller
                 });
             }
         }
+    }
+    /**
+     * Voir les cartes d'assurance enregistrées
+     */
+    public function insuranceCards()
+    {
+        $user = auth()->user();
+        $invoices = \App\Models\Invoice::where('hospital_id', $user->hospital_id)
+            ->where(function($query) {
+                $query->whereNotNull('insurance_name')
+                      ->orWhere('insurance_coverage_rate', '>', 0)
+                      ->orWhereNotNull('insurance_card_number');
+            })
+            ->with(['patient'])
+            ->latest()
+            ->paginate(15);
+
+        return view('cashier.insurance_cards', compact('invoices'));
     }
 }
