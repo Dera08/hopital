@@ -29,7 +29,7 @@ class AuditLog extends Model
         'is_encrypted' => 'boolean',
     ];
 
-    public $timestamps = false;
+    public $timestamps = true;
 
     /**
      * Log an audit event
